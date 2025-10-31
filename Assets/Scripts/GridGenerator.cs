@@ -7,7 +7,7 @@ using UnityEngine;
 /// - Alternating black lines (every other line visible)
 /// </summary>
 [ExecuteAlways]
-public class GridGenerator : MonoBehaviour
+public class GridGenerator : MonoBehaviour, IGridOccupancy
 {
     [Header("Grid")]
     public int rows = 8;
@@ -29,6 +29,9 @@ public class GridGenerator : MonoBehaviour
 
     // cached 1x1 pixel sprite used for cells and lines
     private static Sprite s_pixelSprite;
+    // --- Occupancy logic for Block Blast ---
+    [HideInInspector]
+    public bool[,] gridOccupied; // true = ô đã bị chiếm
 
     private const string CellsParentName = "_Grid_Cells";
     private const string LinesParentName = "_Grid_Lines";
@@ -37,6 +40,34 @@ public class GridGenerator : MonoBehaviour
     {
         if (generateOnStart)
             GenerateGrid();
+    }
+
+    /// <summary>
+    /// Khởi tạo lại trạng thái chiếm ô (gọi sau khi GenerateGrid)
+    /// </summary>
+    private void InitializeOccupancy()
+    {
+        gridOccupied = new bool[cols, rows];
+    }
+
+    /// <summary>
+    /// Kiểm tra ô có bị chiếm không
+    /// </summary>
+    public bool IsCellOccupied(int x, int y)
+    {
+        if (gridOccupied == null) InitializeOccupancy();
+        if (x < 0 || y < 0 || x >= cols || y >= rows) return true; // coi như bị chiếm nếu ngoài phạm vi
+        return gridOccupied[x, y];
+    }
+
+    /// <summary>
+    /// Đặt trạng thái chiếm ô
+    /// </summary>
+    public void SetCellOccupied(int x, int y, bool occupied)
+    {
+        if (gridOccupied == null) InitializeOccupancy();
+        if (x < 0 || y < 0 || x >= cols || y >= rows) return;
+        gridOccupied[x, y] = occupied;
     }
 
     [ContextMenu("Generate Grid")]
@@ -87,7 +118,7 @@ public class GridGenerator : MonoBehaviour
         {
             bool visible = !alternateLines || (i % 2 == 0);
             CreateLine(linesParent, new Vector2(origin.x - cellSize / 2f + i * cellSize, 0f),
-                       new Vector2(lineThickness, totalHeight + lineThickness), visible ? lineColor : new Color(0,0,0,0), 1);
+                       new Vector2(lineThickness, totalHeight + lineThickness), visible ? lineColor : new Color(0, 0, 0, 0), 1);
         }
 
         // draw horizontal lines (rows+1)
@@ -95,9 +126,11 @@ public class GridGenerator : MonoBehaviour
         {
             bool visible = !alternateLines || (i % 2 == 0);
             CreateLine(linesParent, new Vector2(0f, origin.y - cellSize / 2f + i * cellSize),
-                       new Vector2(totalWidth + lineThickness, lineThickness), visible ? lineColor : new Color(0,0,0,0), 1);
+                       new Vector2(totalWidth + lineThickness, lineThickness), visible ? lineColor : new Color(0, 0, 0, 0), 1);
         }
+        InitializeOccupancy();
     }
+
 
     private void CreateLine(Transform parent, Vector2 localPos, Vector2 size, Color color, int sortingOrder = 0)
     {

@@ -46,15 +46,35 @@ public class BlockSpawner : MonoBehaviour
 
     private Coroutine _spawnCoroutine;
 
+    // --- Block Blast slot management ---
+    [Header("Block Blast Slot System")]
+    [Tooltip("Số lượng block được hiển thị cùng lúc (thường = 3)")]
+    public int slotCount = 3;
+
+    // Danh sách giữ các block hiện đang chờ trong spawner
+    private TetrisBlock[] currentBlocks;
+
+    // Khoảng cách giữa các slot hiển thị
+    public float slotSpacing = 2.5f;
+
+    // Vị trí gốc của slot đầu tiên (tính từ transform của spawner)
+    public Vector3 slotBaseOffset = new Vector3(0, 0, 0);
+
     private void Start()
     {
         // Try to find grid reference if not set
         if (gridReference == null)
             gridReference = FindObjectOfType<GridGenerator>();
 
+        // if (spawnOnStart)
+        // {
+        //     SpawnBlock();
+        // }
+
         if (spawnOnStart)
         {
-            SpawnBlock();
+            InitializeSlots();
+            SpawnNewSet();
         }
 
         if (spawnInterval > 0f)
@@ -164,6 +184,87 @@ public class BlockSpawner : MonoBehaviour
             }
         }
     }
+
+    /// <summary>
+    /// Khởi tạo danh sách slot
+    /// </summary>
+    private void InitializeSlots()
+    {
+        currentBlocks = new TetrisBlock[slotCount];
+    }
+
+    /// <summary>
+    /// Tạo ra 3 block mới khi tất cả slot trống
+    /// </summary>
+    private void SpawnNewSet()
+    {
+        // Nếu mảng chưa được khởi tạo
+        if (currentBlocks == null || currentBlocks.Length != slotCount)
+            InitializeSlots();
+
+        for (int i = 0; i < slotCount; i++)
+        {
+            // Spawn mỗi block tại vị trí slot riêng biệt
+            // Căn giữa 3 slot quanh spawner
+            float totalWidth = (slotCount - 1) * slotSpacing;
+            Vector3 startPos = transform.position + slotBaseOffset - new Vector3(totalWidth / 2f, 0, 0);
+            Vector3 slotPos = startPos + new Vector3(i * slotSpacing, 0, 0);
+
+            GameObject go = new GameObject($"TetrisBlock_Slot_{i}");
+            go.transform.position = slotPos;
+            go.transform.SetParent(transform);
+
+            var tb = go.AddComponent<TetrisBlock>();
+            tb.gridReference = gridReference;
+            tb.generateOnStart = false;
+            tb.shapeSet = TetrisBlock.ShapeSet.BlockBlast;
+            tb.blockBlastType = randomizeType
+                ? (TetrisBlock.BlockBlastType)Random.Range(0, System.Enum.GetValues(typeof(TetrisBlock.BlockBlastType)).Length)
+                : defaultType;
+            tb.matchGridStyle = true;
+            tb.snapToGrid = true;
+            tb.generateOnStart = false;
+            tb.randomizeColor = true;
+
+            if (colorPalette != null && colorPalette.Length > 0)
+                tb.colorPalette = colorPalette;
+
+            tb.GenerateBlock();
+
+            // Gán callback khi block được đặt thành công
+            var listener = go.AddComponent<BlockPlacedListener>();
+            listener.onPlaced = OnBlockPlacedFromSlot;
+            listener.spawnerIndex = i;
+
+            currentBlocks[i] = tb;
+        }
+    }
+    /// <summary>
+    /// Gọi khi một block trong slot được đặt lên grid thành công
+    /// </summary>
+    private void OnBlockPlacedFromSlot(int index)
+    {
+        if (currentBlocks == null || index < 0 || index >= currentBlocks.Length) return;
+        currentBlocks[index] = null;
+
+        // Kiểm tra nếu tất cả slot đều trống => spawn set mới
+        bool allUsed = true;
+        foreach (var b in currentBlocks)
+        {
+            if (b != null)
+            {
+                allUsed = false;
+                break;
+            }
+        }
+
+        if (allUsed)
+        {
+            // Spawn 3 block mới
+            SpawnNewSet();
+        }
+    }
+
 
     /// <summary>
     /// Compute a world position to spawn the block below the grid.

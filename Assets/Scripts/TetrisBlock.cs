@@ -18,7 +18,7 @@ public class TetrisBlock : MonoBehaviour
     [Tooltip("Use when Shape Set = Custom. Define cell offsets relative to the block origin.")]
     public Vector2Int[] customOffsets;
     public Color cellColor = new Color(0.0f, 0.4f, 0.7f, 1f);
-    
+
     private Vector3 initialPosition; // Store the initial position of the block
     [Header("Color")]
     [Tooltip("If true, each generated block will get a random color.")]
@@ -56,6 +56,9 @@ public class TetrisBlock : MonoBehaviour
     public Color previewColor = new Color(0.5f, 0.5f, 0.5f, 0.3f);
     // chosen color for the current block instance
     private Color _chosenColor;
+    private int _originalSortingOrder = 2;
+    private string _originalSortingLayer;
+    private const string DraggingSortingLayer = "DraggingBlock";
 
     private void Start()
     {
@@ -106,7 +109,7 @@ public class TetrisBlock : MonoBehaviour
 
             var sr = cell.AddComponent<SpriteRenderer>();
             sr.sprite = s_pixelSprite;
-                sr.color = _chosenColor;
+            sr.color = _chosenColor;
             // ensure blocks render above the grid overlay (higher sorting order)
             sr.sortingOrder = 2;
             cell.transform.localScale = new Vector3(cellSize, cellSize, 1f);
@@ -192,21 +195,21 @@ public class TetrisBlock : MonoBehaviour
         }
     }
 
-    [ContextMenu("Rotate CW")]
-    public void RotateCW()
-    {
-        // rotate child cells 90 degrees clockwise around origin
-        Transform cellsParent = transform.Find(CellsParentName);
-        if (cellsParent == null) return;
+    // [ContextMenu("Rotate CW")]
+    // public void RotateCW()
+    // {
+    //     // rotate child cells 90 degrees clockwise around origin
+    //     Transform cellsParent = transform.Find(CellsParentName);
+    //     if (cellsParent == null) return;
 
-        for (int i = 0; i < cellsParent.childCount; i++)
-        {
-            var child = cellsParent.GetChild(i);
-            Vector3 p = child.localPosition;
-            // (x, y) -> ( -y, x ) for CW rotation around origin
-            child.localPosition = new Vector3(-p.y, p.x, p.z);
-        }
-    }
+    //     for (int i = 0; i < cellsParent.childCount; i++)
+    //     {
+    //         var child = cellsParent.GetChild(i);
+    //         Vector3 p = child.localPosition;
+    //         // (x, y) -> ( -y, x ) for CW rotation around origin
+    //         child.localPosition = new Vector3(-p.y, p.x, p.z);
+    //     }
+    // }
 
 
     private Vector2Int[] GetOffsetsForBlockBlast(BlockBlastType t)
@@ -339,6 +342,17 @@ public class TetrisBlock : MonoBehaviour
         Vector3 mouseWorld = _cam.ScreenToWorldPoint(Input.mousePosition);
         mouseWorld.z = transform.position.z;
         _dragOffsetWorld = transform.position - mouseWorld;
+
+        // Khi bắt đầu kéo: tăng sorting order và đổi sang layer DraggingBlock
+        foreach (var sr in GetComponentsInChildren<SpriteRenderer>())
+        {
+            _originalSortingOrder = sr.sortingOrder;
+            _originalSortingLayer = sr.sortingLayerName;
+            sr.sortingLayerName = DraggingSortingLayer;
+            sr.sortingOrder = 500; // đảm bảo nổi lên trên tất cả block khác
+        }
+
+
     }
 
     private void OnMouseDrag()
@@ -359,16 +373,53 @@ public class TetrisBlock : MonoBehaviour
         if (!draggable) return;
         if (!Application.isPlaying) return;
 
-        // Try to snap to grid
-        bool snapSuccessful = SnapToGrid();
-        
-        if (!snapSuccessful)
+        // Nếu không có gridReference hoặc điểm thả không nằm trong vùng lưới -> revert ngay
+        if (gridReference == null || !IsReleasedInsideGrid(transform.position))
         {
-            // If snap failed (position would be invalid), return to spawn position
             transform.position = initialPosition;
+
+            // Sau khi thả chuột: trả sorting layer và order về như cũ
+            foreach (var sr in GetComponentsInChildren<SpriteRenderer>())
+            {
+                sr.sortingLayerName = _originalSortingLayer;
+                sr.sortingOrder = _originalSortingOrder;
+            }
+
+
+
+            ClearPreview();
+            return;
         }
-        
-        // clear any preview
+
+        // Điểm thả nằm trong vùng lưới: thử snap & đặt
+        bool snapSuccessful = SnapToGrid();
+
+        if (snapSuccessful && CanPlaceOnGrid())
+        {
+            PlaceOnGrid();
+            // block đã đặt cố định
+            draggable = false;
+
+            // ✅ Sau khi snap thành công, trả lại layer & order gốc
+            foreach (var sr in GetComponentsInChildren<SpriteRenderer>())
+            {
+                sr.sortingLayerName = _originalSortingLayer;
+                sr.sortingOrder = _originalSortingOrder;
+            }
+        }
+        else
+        {
+            // nếu snap không thành công hoặc vị trí đã bị chiếm -> revert
+            transform.position = initialPosition;
+
+            // ✅ Sau khi snap thất bại, trả lại layer & order gốc
+            foreach (var sr in GetComponentsInChildren<SpriteRenderer>())
+            {
+                sr.sortingLayerName = _originalSortingLayer;
+                sr.sortingOrder = _originalSortingOrder;
+            }
+        }
+
         ClearPreview();
     }
 
@@ -393,7 +444,7 @@ public class TetrisBlock : MonoBehaviour
             float snappedX = Mathf.Round(localToOriginFallback.x / gCell) * gCell + worldOrigin.x;
             float snappedY = Mathf.Round(localToOriginFallback.y / gCell) * gCell + worldOrigin.y;
             Vector3 newPosition = new Vector3(snappedX, snappedY, transform.position.z);
-            
+
             // Only apply if the position would be valid
             if (IsPositionValidOnGrid(newPosition))
             {
@@ -439,14 +490,14 @@ public class TetrisBlock : MonoBehaviour
         float finalX = worldOrigin2.x + snapGx * cell;
         float finalY = worldOrigin2.y + snapGy * cell;
         Vector3 snappedPosition = new Vector3(finalX, finalY, transform.position.z);
-        
+
         // Only apply the new position if it's valid on the grid
         if (IsPositionValidOnGrid(snappedPosition))
         {
             transform.position = snappedPosition;
             return true;
         }
-        
+
         // If not valid, keep original position
         transform.position = originalPosition;
         return false;
@@ -488,7 +539,7 @@ public class TetrisBlock : MonoBehaviour
         ClearChildren(previewParent);
 
         // Only show preview if position is valid
-        if (!valid) 
+        if (!valid)
         {
             ClearChildren(previewParent);
             return;
@@ -519,4 +570,99 @@ public class TetrisBlock : MonoBehaviour
         if (parent == null) return;
         ClearChildren(parent);
     }
+    // --- Block Blast specific placement logic ---
+
+    /// <summary>
+    /// Kiểm tra xem block hiện tại có thể đặt vào vị trí này không (dựa theo grid).
+    /// </summary>
+    public bool CanPlaceOnGrid()
+    {
+        if (gridReference == null || _lastOffsets == null) return false;
+
+        float cell = gridReference.cellSize;
+        int cols = gridReference.cols;
+        int rows = gridReference.rows;
+        float totalW = cols * cell;
+        float totalH = rows * cell;
+        Vector2 gOrigin = new Vector2(-totalW / 2f + cell / 2f, -totalH / 2f + cell / 2f);
+        Vector2 worldOrigin = (Vector2)gridReference.transform.position + gOrigin;
+
+        // Tính toạ độ grid của khối
+        Vector2 localToOrigin = (Vector2)transform.position - worldOrigin;
+        int gx = Mathf.RoundToInt(localToOrigin.x / cell);
+        int gy = Mathf.RoundToInt(localToOrigin.y / cell);
+
+        // Kiểm tra xem tất cả ô trong block có nằm trong grid và chưa bị chiếm không
+        foreach (var offset in _lastOffsets)
+        {
+            int cx = gx + offset.x;
+            int cy = gy + offset.y;
+
+            if (cx < 0 || cx >= cols || cy < 0 || cy >= rows)
+                return false;
+
+            // Nếu GridGenerator đã có logic "occupied", thì kiểm tra tại đây
+            if (gridReference is IGridOccupancy gridOcc && gridOcc.IsCellOccupied(cx, cy))
+                return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Đặt block lên grid (đánh dấu các ô là đã chiếm).
+    /// Chỉ gọi hàm này sau khi CanPlaceOnGrid() == true.
+    /// </summary>
+    public void PlaceOnGrid()
+    {
+        if (gridReference == null || _lastOffsets == null) return;
+        if (!(gridReference is IGridOccupancy gridOcc)) return;
+
+        float cell = gridReference.cellSize;
+        int cols = gridReference.cols;
+        int rows = gridReference.rows;
+        float totalW = cols * cell;
+        float totalH = rows * cell;
+        Vector2 gOrigin = new Vector2(-totalW / 2f + cell / 2f, -totalH / 2f + cell / 2f);
+        Vector2 worldOrigin = (Vector2)gridReference.transform.position + gOrigin;
+
+        Vector2 localToOrigin = (Vector2)transform.position - worldOrigin;
+        int gx = Mathf.RoundToInt(localToOrigin.x / cell);
+        int gy = Mathf.RoundToInt(localToOrigin.y / cell);
+
+        foreach (var offset in _lastOffsets)
+        {
+            int cx = gx + offset.x;
+            int cy = gy + offset.y;
+            gridOcc.SetCellOccupied(cx, cy, true);
+        }
+
+        // Có thể thêm hiệu ứng hoặc âm thanh khi đặt thành công ở đây
+    }
+    /// <summary>
+    /// Trả về true nếu worldPos (vị trí thả) nằm *bên trong* vùng lưới (ít nhất 1 ô của origin sẽ nằm trong [0..cols-1]/[0..rows-1]).
+    /// Chú ý: không kiểm tra occupancy ở đây — chỉ kiểm tra ranh giới lưới.
+    /// </summary>
+    private bool IsReleasedInsideGrid(Vector3 worldPos)
+    {
+        if (gridReference == null || _lastOffsets == null || _lastOffsets.Length == 0) return false;
+
+        float cell = gridReference.cellSize;
+        int cols = gridReference.cols;
+        int rows = gridReference.rows;
+        float totalW = cols * cell;
+        float totalH = rows * cell;
+        Vector2 gOrigin = new Vector2(-totalW / 2f + cell / 2f, -totalH / 2f + cell / 2f);
+        Vector2 worldOrigin = (Vector2)gridReference.transform.position + gOrigin;
+
+        // toạ độ tương đối so với origin
+        Vector2 localToOrigin = (Vector2)worldPos - worldOrigin;
+
+        // chỉ cần toạ độ origin (gx,gy) gần nhất — nếu origin này nằm trong lưới, ta coi release là "inside"
+        int gx = Mathf.RoundToInt(localToOrigin.x / cell);
+        int gy = Mathf.RoundToInt(localToOrigin.y / cell);
+
+        return (gx >= 0 && gx < cols && gy >= 0 && gy < rows);
+    }
+
 }
