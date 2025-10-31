@@ -56,5 +56,5 @@
         "temp/": true,
         "Temp/": true
     },
-    "dotnet.defaultSolution": "Block Blast demo.sln"
+    "dotnet.defaultSolution": "BlockBlastDemo.sln"
 }
