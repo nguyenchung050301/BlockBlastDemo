@@ -608,11 +608,6 @@ public class TetrisBlock : MonoBehaviour
 
         return true;
     }
-
-    /// <summary>
-    /// Đặt block lên grid (đánh dấu các ô là đã chiếm).
-    /// Chỉ gọi hàm này sau khi CanPlaceOnGrid() == true.
-    /// </summary>
     public void PlaceOnGrid()
     {
         if (gridReference == null || _lastOffsets == null) return;
@@ -634,18 +629,45 @@ public class TetrisBlock : MonoBehaviour
         {
             int cx = gx + offset.x;
             int cy = gy + offset.y;
+
+            // bounds safety check
+            if (cx < 0 || cx >= cols || cy < 0 || cy >= rows)
+            {
+                // nếu bất kỳ ô nào nằm ngoài grid thì revert vị trí và abort
+                transform.position = initialPosition;
+                return;
+            }
+
+            // Nếu ô đã bị chiếm, revert và abort (an toàn)
+            if (gridOcc.IsCellOccupied(cx, cy))
+            {
+                transform.position = initialPosition;
+                return;
+            }
+        }
+
+        // Nếu đến đây thì tất cả ô hợp lệ — đánh dấu occupancy
+        foreach (var offset in _lastOffsets)
+        {
+            int cx = gx + offset.x;
+            int cy = gy + offset.y;
             gridOcc.SetCellOccupied(cx, cy, true);
         }
 
+        // Tùy: bạn có thể đặt lại vị trí block transform cho khớp cell trung tâm nếu cần,
+        // nhưng hiện giữ nguyên transform để tránh các chỉnh động gây lệch.
         // Sau khi đặt block xong, kiểm tra hàng/cột đầy
         if (gridReference != null)
         {
             gridReference.CheckAndClearFullLines();
         }
 
-
-        // Có thể thêm hiệu ứng hoặc âm thanh khi đặt thành công ở đây
+        // khóa block để không kéo nữa
+        draggable = false;
     }
+
+
+
     /// <summary>
     /// Trả về true nếu worldPos (vị trí thả) nằm *bên trong* vùng lưới (ít nhất 1 ô của origin sẽ nằm trong [0..cols-1]/[0..rows-1]).
     /// Chú ý: không kiểm tra occupancy ở đây — chỉ kiểm tra ranh giới lưới.

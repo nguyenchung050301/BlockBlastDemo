@@ -334,6 +334,12 @@ public class GridGenerator : MonoBehaviour, IGridOccupancy
 
         foreach (var block in allBlocks)
         {
+            // SKIP nếu block vẫn draggable (vẫn đang ở spawner hoặc chưa đặt)
+            if (block.draggable) continue;
+
+            // SKIP nếu block không thuộc grid này (an toàn khi nhiều grid tồn tại)
+            if (block.gridReference != this) continue;
+
             var cellsParent = block.transform.Find(cellsParentName);
             if (cellsParent == null) continue;
 
@@ -349,6 +355,9 @@ public class GridGenerator : MonoBehaviour, IGridOccupancy
                 Vector3 worldPos = cell.position;
                 int gridX = Mathf.RoundToInt((worldPos.x - gridOrigin.x) / cellSize);
                 int gridY = Mathf.RoundToInt((worldPos.y - gridOrigin.y) / cellSize);
+
+                // Only consider cells that actually map inside this grid
+                if (gridX < 0 || gridX >= cols || gridY < 0 || gridY >= rows) continue;
 
                 if (gridY == targetRow)
                 {
@@ -381,6 +390,12 @@ public class GridGenerator : MonoBehaviour, IGridOccupancy
 
         foreach (var block in allBlocks)
         {
+            // SKIP nếu block vẫn draggable (vẫn đang ở spawner hoặc chưa đặt)
+            if (block.draggable) continue;
+
+            // SKIP nếu block không thuộc grid này
+            if (block.gridReference != this) continue;
+
             var cellsParent = block.transform.Find(cellsParentName);
             if (cellsParent == null) continue;
 
@@ -395,6 +410,9 @@ public class GridGenerator : MonoBehaviour, IGridOccupancy
                 Vector3 worldPos = cell.position;
                 int gridX = Mathf.RoundToInt((worldPos.x - gridOrigin.x) / cellSize);
                 int gridY = Mathf.RoundToInt((worldPos.y - gridOrigin.y) / cellSize);
+
+                // Only consider cells that actually map inside this grid
+                if (gridX < 0 || gridX >= cols || gridY < 0 || gridY >= rows) continue;
 
                 if (gridX == targetCol)
                 {
@@ -413,6 +431,7 @@ public class GridGenerator : MonoBehaviour, IGridOccupancy
             }
         }
     }
+
 
     /// <summary>
     /// Nếu parent (cellsParent) rỗng sau delay thì destroy luôn block parent.
