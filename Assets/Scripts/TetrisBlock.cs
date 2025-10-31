@@ -637,6 +637,13 @@ public class TetrisBlock : MonoBehaviour
             gridOcc.SetCellOccupied(cx, cy, true);
         }
 
+        // Sau khi đặt block xong, kiểm tra hàng/cột đầy
+        if (gridReference != null)
+        {
+            gridReference.CheckAndClearFullLines();
+        }
+
+
         // Có thể thêm hiệu ứng hoặc âm thanh khi đặt thành công ở đây
     }
     /// <summary>

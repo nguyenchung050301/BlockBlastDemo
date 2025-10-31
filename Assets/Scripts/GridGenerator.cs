@@ -1,5 +1,6 @@
 using UnityEngine;
-
+using System.Collections;
+using System.Collections.Generic;
 /// <summary>
 /// Generates a 2D grid of square cells and draws grid lines.
 /// Usage: Attach to a GameObject in the scene and press the "Generate Grid" context menu or enable Generate On Start.
@@ -32,6 +33,8 @@ public class GridGenerator : MonoBehaviour, IGridOccupancy
     // --- Occupancy logic for Block Blast ---
     [HideInInspector]
     public bool[,] gridOccupied; // true = ô đã bị chiếm
+    // Giữ SpriteRenderer của từng ô để có thể điều khiển màu/alpha khi clear
+    private SpriteRenderer[,] cellRenderers;
 
     private const string CellsParentName = "_Grid_Cells";
     private const string LinesParentName = "_Grid_Lines";
@@ -68,6 +71,149 @@ public class GridGenerator : MonoBehaviour, IGridOccupancy
         if (gridOccupied == null) InitializeOccupancy();
         if (x < 0 || y < 0 || x >= cols || y >= rows) return;
         gridOccupied[x, y] = occupied;
+    }
+
+    /// <summary>
+    /// Kiểm tra tất cả hàng & cột, và xóa những hàng/cột đã đầy.
+    /// </summary>
+    public void CheckAndClearFullLines()
+    {
+        if (gridOccupied == null) return;
+
+        // Danh sách hàng & cột đầy
+        System.Collections.Generic.List<int> fullRows = new System.Collections.Generic.List<int>();
+        System.Collections.Generic.List<int> fullCols = new System.Collections.Generic.List<int>();
+
+        // Kiểm tra hàng
+        for (int y = 0; y < rows; y++)
+        {
+            bool rowFull = true;
+            for (int x = 0; x < cols; x++)
+            {
+                if (!gridOccupied[x, y])
+                {
+                    rowFull = false;
+                    break;
+                }
+            }
+            if (rowFull)
+                fullRows.Add(y);
+        }
+
+        // Kiểm tra cột
+        for (int x = 0; x < cols; x++)
+        {
+            bool colFull = true;
+            for (int y = 0; y < rows; y++)
+            {
+                if (!gridOccupied[x, y])
+                {
+                    colFull = false;
+                    break;
+                }
+            }
+            if (colFull)
+                fullCols.Add(x);
+        }
+
+        // Xóa hàng đầy
+        foreach (int y in fullRows)
+        {
+            ClearRow(y);
+        }
+
+        // Xóa cột đầy
+        foreach (int x in fullCols)
+        {
+            ClearColumn(x);
+        }
+        //   Debug.Log($"cellRenderers[{x},{y}] = {(cellRenderers[x, y] != null ? "OK" : "NULL")}");
+    }
+
+    /// <summary>
+    /// Đặt lại trạng thái các ô trong hàng y = false (trống)
+    /// </summary>
+    private void ClearRow(int y)
+    {
+        StartCoroutine(ClearRowCoroutine(y));
+    }
+
+    private IEnumerator ClearRowCoroutine(int y)
+    {
+        // Tính lại vị trí gốc của grid (góc trái dưới)
+        float totalWidth = cols * cellSize;
+        float totalHeight = rows * cellSize;
+        Vector3 gridOrigin = transform.position - new Vector3(totalWidth / 2f - cellSize / 2f, totalHeight / 2f - cellSize / 2f, 0);
+
+        for (int x = 0; x < cols; x++)
+        {
+            gridOccupied[x, y] = false;
+
+            // Tính vị trí world của ô đang clear
+            Vector3 cellPos = gridOrigin + new Vector3(x * cellSize, y * cellSize, 0);
+            SpawnFadeCell(cellPos);
+        }
+
+        yield return new WaitForSeconds(0.35f);
+        DeleteCellsOnRow(y);
+        Debug.Log($"Cleared row {y} visually");
+    }
+
+    /// <summary>
+    /// Đặt lại trạng thái các ô trong cột x = false (trống)
+    /// </summary>
+    private void ClearColumn(int x)
+    {
+        StartCoroutine(ClearColumnCoroutine(x));
+    }
+
+    private IEnumerator ClearColumnCoroutine(int x)
+    {
+        float totalWidth = cols * cellSize;
+        float totalHeight = rows * cellSize;
+        Vector3 gridOrigin = transform.position - new Vector3(totalWidth / 2f - cellSize / 2f, totalHeight / 2f - cellSize / 2f, 0);
+
+        for (int y = 0; y < rows; y++)
+        {
+            gridOccupied[x, y] = false;
+
+            Vector3 cellPos = gridOrigin + new Vector3(x * cellSize, y * cellSize, 0);
+            SpawnFadeCell(cellPos);
+        }
+
+        yield return new WaitForSeconds(0.35f);
+        DeleteCellsOnColumn(x);
+        Debug.Log($"Cleared column {x} visually");
+    }
+
+    private void SpawnFadeCell(Vector3 position)
+    {
+        GameObject fx = new GameObject("ClearFXCell");
+        fx.transform.position = position;
+
+        var sr = fx.AddComponent<SpriteRenderer>();
+        sr.sprite = s_pixelSprite;
+        sr.color = new Color(cellColor.r, cellColor.g, cellColor.b, 1f);
+        sr.sortingOrder = 50; // đảm bảo nằm trên grid
+
+        StartCoroutine(FadeAndDestroy(sr));
+    }
+
+    private IEnumerator FadeAndDestroy(SpriteRenderer sr)
+    {
+        float duration = 0.3f;
+        float t = 0f;
+        Color start = sr.color;
+
+        while (t < duration)
+        {
+            t += Time.deltaTime;
+            float a = Mathf.Lerp(1f, 0f, t / duration);
+            sr.color = new Color(start.r, start.g, start.b, a);
+            yield return null;
+        }
+
+        Destroy(sr.gameObject);
     }
 
     [ContextMenu("Generate Grid")]
@@ -107,6 +253,13 @@ public class GridGenerator : MonoBehaviour, IGridOccupancy
                 var sr = cell.AddComponent<SpriteRenderer>();
                 sr.sprite = s_pixelSprite;
                 sr.color = cellColor;
+
+                // Lưu SpriteRenderer để điều khiển sau này
+                if (cellRenderers == null || cellRenderers.GetLength(0) != cols || cellRenderers.GetLength(1) != rows)
+                    cellRenderers = new SpriteRenderer[cols, rows];
+                cellRenderers[c, r] = sr;
+
+
                 // grid cells render at base sorting order
                 sr.sortingOrder = 0;
                 cell.transform.localScale = new Vector3(innerSize, innerSize, 1f);
@@ -167,6 +320,147 @@ public class GridGenerator : MonoBehaviour, IGridOccupancy
                 DestroyImmediate(child);
         }
     }
+
+    // --- Replace previous DeleteCellsOnRow/DeleteCellsOnColumn with this safer implementation ---
+
+    private void DeleteCellsOnRow(int targetRow)
+    {
+        float totalWidth = cols * cellSize;
+        float totalHeight = rows * cellSize;
+        Vector3 gridOrigin = transform.position - new Vector3(totalWidth / 2f - cellSize / 2f, totalHeight / 2f - cellSize / 2f, 0);
+
+        TetrisBlock[] allBlocks = FindObjectsOfType<TetrisBlock>();
+        string cellsParentName = "_Block_Cells";
+
+        foreach (var block in allBlocks)
+        {
+            var cellsParent = block.transform.Find(cellsParentName);
+            if (cellsParent == null) continue;
+
+            var toDelete = new System.Collections.Generic.List<Transform>();
+
+            // Collect only actual cell children (filter by SpriteRenderer and/or name prefix)
+            foreach (Transform cell in cellsParent)
+            {
+                if (cell == null) continue;
+                var sr = cell.GetComponent<SpriteRenderer>();
+                if (sr == null) continue; // không phải ô hiển thị -> skip
+
+                Vector3 worldPos = cell.position;
+                int gridX = Mathf.RoundToInt((worldPos.x - gridOrigin.x) / cellSize);
+                int gridY = Mathf.RoundToInt((worldPos.y - gridOrigin.y) / cellSize);
+
+                if (gridY == targetRow)
+                {
+                    toDelete.Add(cell);
+                }
+            }
+
+            // Start fade+destroy cho từng ô cần xóa
+            foreach (var t in toDelete)
+            {
+                StartCoroutine(FadeAndDestroyCell(t.gameObject));
+            }
+
+            // Nếu sau một khoảng thời gian ô con đã hết (block rỗng), xóa luôn parent block
+            if (toDelete.Count > 0)
+            {
+                StartCoroutine(DestroyBlockIfEmptyAfterDelay(cellsParent, block.gameObject, 0.4f));
+            }
+        }
+    }
+
+    private void DeleteCellsOnColumn(int targetCol)
+    {
+        float totalWidth = cols * cellSize;
+        float totalHeight = rows * cellSize;
+        Vector3 gridOrigin = transform.position - new Vector3(totalWidth / 2f - cellSize / 2f, totalHeight / 2f - cellSize / 2f, 0);
+
+        TetrisBlock[] allBlocks = FindObjectsOfType<TetrisBlock>();
+        string cellsParentName = "_Block_Cells";
+
+        foreach (var block in allBlocks)
+        {
+            var cellsParent = block.transform.Find(cellsParentName);
+            if (cellsParent == null) continue;
+
+            var toDelete = new System.Collections.Generic.List<Transform>();
+
+            foreach (Transform cell in cellsParent)
+            {
+                if (cell == null) continue;
+                var sr = cell.GetComponent<SpriteRenderer>();
+                if (sr == null) continue;
+
+                Vector3 worldPos = cell.position;
+                int gridX = Mathf.RoundToInt((worldPos.x - gridOrigin.x) / cellSize);
+                int gridY = Mathf.RoundToInt((worldPos.y - gridOrigin.y) / cellSize);
+
+                if (gridX == targetCol)
+                {
+                    toDelete.Add(cell);
+                }
+            }
+
+            foreach (var t in toDelete)
+            {
+                StartCoroutine(FadeAndDestroyCell(t.gameObject));
+            }
+
+            if (toDelete.Count > 0)
+            {
+                StartCoroutine(DestroyBlockIfEmptyAfterDelay(cellsParent, block.gameObject, 0.4f));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Nếu parent (cellsParent) rỗng sau delay thì destroy luôn block parent.
+    /// </summary>
+    private IEnumerator DestroyBlockIfEmptyAfterDelay(Transform cellsParent, GameObject blockGameObject, float delay)
+    {
+        yield return new WaitForSeconds(delay);
+
+        // cellsParent có thể đã bị thay đổi (destroyed) — kiểm tra an toàn
+        if (cellsParent == null)
+        {
+            yield break;
+        }
+
+        if (cellsParent.childCount == 0)
+        {
+            Destroy(blockGameObject);
+        }
+    }
+
+
+    /// <summary>
+    /// Fade nhẹ rồi destroy cell.
+    /// </summary>
+    private IEnumerator FadeAndDestroyCell(GameObject cell)
+    {
+        var sr = cell.GetComponent<SpriteRenderer>();
+        if (sr == null)
+        {
+            Destroy(cell);
+            yield break;
+        }
+
+        Color start = sr.color;
+        float duration = 0.3f;
+        float t = 0f;
+
+        while (t < duration)
+        {
+            t += Time.deltaTime;
+            float a = Mathf.Lerp(1f, 0f, t / duration);
+            sr.color = new Color(start.r, start.g, start.b, a);
+            yield return null;
+        }
+
+        Destroy(cell);
+    }
+
 
     private void EnsurePixelSprite()
     {
