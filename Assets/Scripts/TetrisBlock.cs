@@ -18,6 +18,8 @@ public class TetrisBlock : MonoBehaviour
     [Tooltip("Use when Shape Set = Custom. Define cell offsets relative to the block origin.")]
     public Vector2Int[] customOffsets;
     public Color cellColor = new Color(0.0f, 0.4f, 0.7f, 1f);
+    
+    private Vector3 initialPosition; // Store the initial position of the block
     [Header("Color")]
     [Tooltip("If true, each generated block will get a random color.")]
     public bool randomizeColor = true;
@@ -50,9 +52,8 @@ public class TetrisBlock : MonoBehaviour
     private Vector2Int[] _lastOffsets;
     private const string PreviewParentName = "_Block_Preview";
     [Header("Preview")]
-    public Color previewValidColor = new Color(0f, 1f, 0f, 0.5f);
-    public Color previewInvalidColor = new Color(1f, 0f, 0f, 0.5f);
-    public float previewAlpha = 0.5f;
+    [Tooltip("Color used for block preview when dragging")]
+    public Color previewColor = new Color(0.5f, 0.5f, 0.5f, 0.3f);
     // chosen color for the current block instance
     private Color _chosenColor;
 
@@ -94,6 +95,9 @@ public class TetrisBlock : MonoBehaviour
         }
 
         // create cells
+        // Store initial position when generating the block
+        initialPosition = transform.position;
+
         foreach (var off in offsets)
         {
             GameObject cell = new GameObject($"cell_{off.x}_{off.y}");
@@ -138,10 +142,13 @@ public class TetrisBlock : MonoBehaviour
             transform.position = new Vector3(snappedX, snappedY, transform.position.z);
         }
 
-    // store offsets for snapping
-    _lastOffsets = offsets;
+        // store offsets for snapping
+        _lastOffsets = offsets;
 
-    // optionally add or update a parent collider so block can be dragged
+        // Store initial spawn position
+        initialPosition = transform.position;
+
+        // optionally add or update a parent collider so block can be dragged
         if (addDragCollider)
         {
             // compute bounding box from offsets
@@ -250,6 +257,45 @@ public class TetrisBlock : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Returns the block to its initial position
+    /// </summary>
+    public void ReturnToStart()
+    {
+        transform.position = initialPosition;
+    }
+
+    private bool IsPositionValidOnGrid(Vector3 position)
+    {
+        if (gridReference == null || _lastOffsets == null || _lastOffsets.Length == 0) return false;
+
+        float cell = gridReference.cellSize;
+        int cols = gridReference.cols;
+        int rows = gridReference.rows;
+        float totalW = cols * cell;
+        float totalH = rows * cell;
+        Vector2 gOrigin = new Vector2(-totalW / 2f + cell / 2f, -totalH / 2f + cell / 2f);
+        Vector2 worldOrigin = (Vector2)gridReference.transform.position + gOrigin;
+
+        // Calculate grid coordinates
+        Vector2 localToOrigin = (Vector2)position - worldOrigin;
+        int gx = Mathf.RoundToInt(localToOrigin.x / cell);
+        int gy = Mathf.RoundToInt(localToOrigin.y / cell);
+
+        // Check if any part of the block would be outside the grid
+        foreach (var offset in _lastOffsets)
+        {
+            int cx = gx + offset.x;
+            int cy = gy + offset.y;
+            if (cx < 0 || cx >= cols || cy < 0 || cy >= rows)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     private void EnsurePixelSprite()
     {
         if (s_pixelSprite != null) return;
@@ -278,13 +324,18 @@ public class TetrisBlock : MonoBehaviour
     // --- Dragging support ---
     private Vector3 _dragOffsetWorld;
     private Camera _cam;
+    private Vector3 _dragStartPosition; // Store position when starting drag
 
     private void OnMouseDown()
     {
         if (!draggable) return;
-        if (!Application.isPlaying) return; // only allow runtime dragging
+        if (!Application.isPlaying) return;
         _cam = Camera.main;
         if (_cam == null) return;
+
+        // Store the starting position
+        _dragStartPosition = transform.position;
+
         Vector3 mouseWorld = _cam.ScreenToWorldPoint(Input.mousePosition);
         mouseWorld.z = transform.position.z;
         _dragOffsetWorld = transform.position - mouseWorld;
@@ -307,15 +358,26 @@ public class TetrisBlock : MonoBehaviour
     {
         if (!draggable) return;
         if (!Application.isPlaying) return;
-        // snap to grid when release
-        SnapToGrid();
-        // clear any preview now that we've snapped
+
+        // Try to snap to grid
+        bool snapSuccessful = SnapToGrid();
+        
+        if (!snapSuccessful)
+        {
+            // If snap failed (position would be invalid), return to spawn position
+            transform.position = initialPosition;
+        }
+        
+        // clear any preview
         ClearPreview();
     }
 
-    public void SnapToGrid()
+    public bool SnapToGrid()
     {
-        if (gridReference == null) return;
+        if (gridReference == null) return false;
+
+        // Store original position in case we need to revert
+        Vector3 originalPosition = transform.position;
 
         // Need offsets information (which cells compose this block)
         if (_lastOffsets == null || _lastOffsets.Length == 0)
@@ -330,8 +392,16 @@ public class TetrisBlock : MonoBehaviour
             Vector2 localToOriginFallback = (Vector2)transform.position - worldOrigin;
             float snappedX = Mathf.Round(localToOriginFallback.x / gCell) * gCell + worldOrigin.x;
             float snappedY = Mathf.Round(localToOriginFallback.y / gCell) * gCell + worldOrigin.y;
-            transform.position = new Vector3(snappedX, snappedY, transform.position.z);
-            return;
+            Vector3 newPosition = new Vector3(snappedX, snappedY, transform.position.z);
+            
+            // Only apply if the position would be valid
+            if (IsPositionValidOnGrid(newPosition))
+            {
+                transform.position = newPosition;
+                return true;
+            }
+            transform.position = originalPosition;
+            return false;
         }
 
         float cell = gridReference.cellSize;
@@ -368,7 +438,18 @@ public class TetrisBlock : MonoBehaviour
 
         float finalX = worldOrigin2.x + snapGx * cell;
         float finalY = worldOrigin2.y + snapGy * cell;
-        transform.position = new Vector3(finalX, finalY, transform.position.z);
+        Vector3 snappedPosition = new Vector3(finalX, finalY, transform.position.z);
+        
+        // Only apply the new position if it's valid on the grid
+        if (IsPositionValidOnGrid(snappedPosition))
+        {
+            transform.position = snappedPosition;
+            return true;
+        }
+        
+        // If not valid, keep original position
+        transform.position = originalPosition;
+        return false;
     }
 
     // --- Preview helpers ---
@@ -406,15 +487,11 @@ public class TetrisBlock : MonoBehaviour
         Transform previewParent = GetOrCreateChild(gridReference.transform, PreviewParentName);
         ClearChildren(previewParent);
 
-        Color useColor;
-        if (valid)
+        // Only show preview if position is valid
+        if (!valid) 
         {
-            Color baseColor = (_chosenColor == default(Color)) ? cellColor : _chosenColor;
-            useColor = new Color(baseColor.r, baseColor.g, baseColor.b, previewAlpha);
-        }
-        else
-        {
-            useColor = previewInvalidColor;
+            ClearChildren(previewParent);
+            return;
         }
 
         foreach (var o in _lastOffsets)
@@ -429,8 +506,8 @@ public class TetrisBlock : MonoBehaviour
             p.transform.localPosition = new Vector3(local.x, local.y, 0f);
             var sr = p.AddComponent<SpriteRenderer>();
             sr.sprite = s_pixelSprite;
-            sr.color = useColor;
-                sr.sortingOrder = 1; // place preview behind block cells (block cells use sortingOrder = 2)
+            sr.color = previewColor;
+            sr.sortingOrder = 1; // place preview behind block cells (block cells use sortingOrder = 2)
             p.transform.localScale = new Vector3(cell, cell, 1f);
         }
     }
