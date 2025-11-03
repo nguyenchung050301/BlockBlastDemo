@@ -82,6 +82,9 @@ public class GridGenerator : MonoBehaviour, IGridOccupancy
     /// </summary>
     public void CheckAndClearFullLines()
     {
+        int clearedLines = 0; // <— thêm dòng này
+
+        bool wasCombo = false;
         if (gridOccupied == null) return;
 
         // Danh sách hàng & cột đầy
@@ -124,16 +127,26 @@ public class GridGenerator : MonoBehaviour, IGridOccupancy
         foreach (int y in fullRows)
         {
             ClearRow(y);
+            clearedLines++;
         }
 
         // Xóa cột đầy
         foreach (int x in fullCols)
         {
             ClearColumn(x);
+            clearedLines++;
         }
         //   Debug.Log($"cellRenderers[{x},{y}] = {(cellRenderers[x, y] != null ? "OK" : "NULL")}");
         // Sau khi xóa hàng/cột xong -> căn lại toàn bộ block
         RealignPlacedBlocks();
+        if (clearedLines > 0)
+            wasCombo = true;
+        else
+            wasCombo = false;
+
+        // Gọi AI để cập nhật độ khó
+        FindObjectOfType<AIBlockBalancer>()?.OnBlockPlaced(wasCombo);
+
 
     }
 

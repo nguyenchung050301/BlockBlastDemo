@@ -2,6 +2,18 @@
 using System.Collections.Generic;
 using System.Collections;
 using UnityEngine;
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public enum BlockDifficulty
+{
+    Easy,
+    Medium,
+    Hard
+}
+
 
 /// <summary>
 /// Simple BlockSpawner: creates TetrisBlock GameObjects below a GridGenerator.
@@ -12,6 +24,37 @@ using UnityEngine;
 [DisallowMultipleComponent]
 public class BlockSpawner : MonoBehaviour
 {
+    [Header("AI Difficulty Balancing")]
+    public BlockDifficulty currentDifficulty = BlockDifficulty.Easy;
+    // Danh sách shape chia theo độ khó
+    private static readonly List<TetrisBlock.BlockBlastType> EasyShapes = new()
+{
+    TetrisBlock.BlockBlastType.Single,
+  //  TetrisBlock.BlockBlastType.Pair,
+    TetrisBlock.BlockBlastType.Square2,
+ //   TetrisBlock.BlockBlastType.Line3,
+    TetrisBlock.BlockBlastType.SmallL,
+   // TetrisBlock.BlockBlastType.Line4
+};
+
+    private static readonly List<TetrisBlock.BlockBlastType> MediumShapes = new()
+{
+    TetrisBlock.BlockBlastType.SmallL,
+    TetrisBlock.BlockBlastType.TShape,
+    TetrisBlock.BlockBlastType.ZShape,
+    TetrisBlock.BlockBlastType.SShape,
+    TetrisBlock.BlockBlastType.Plus
+};
+
+    private static readonly List<TetrisBlock.BlockBlastType> HardShapes = new()
+{
+    TetrisBlock.BlockBlastType.BigSquare,
+    TetrisBlock.BlockBlastType.Corner3x3,
+    TetrisBlock.BlockBlastType.UShape,
+    TetrisBlock.BlockBlastType.HollowSquare,
+    TetrisBlock.BlockBlastType.CrossX
+};
+
     [Header("Grid Reference")]
     [Tooltip("Reference to the GridGenerator in the scene")]
     public GridGenerator gridReference;
@@ -141,7 +184,7 @@ public class BlockSpawner : MonoBehaviour
                     foreach (float w in shapeWeights)
                         totalWeight += w;
 
-                    float rand = Random.value * totalWeight;
+                    float rand = UnityEngine.Random.value * totalWeight;
                     float cumulative = 0f;
 
                     bool found = false;
@@ -162,7 +205,7 @@ public class BlockSpawner : MonoBehaviour
                 else
                 {
                     // Equal probability for all types
-                    tb.blockBlastType = (TetrisBlock.BlockBlastType)Random.Range(0, System.Enum.GetValues(typeof(TetrisBlock.BlockBlastType)).Length);
+                    tb.blockBlastType = (TetrisBlock.BlockBlastType)UnityEngine.Random.Range(0, System.Enum.GetValues(typeof(TetrisBlock.BlockBlastType)).Length);
                 }
             }
             else
@@ -221,9 +264,18 @@ public class BlockSpawner : MonoBehaviour
             tb.gridReference = gridReference;
             tb.generateOnStart = false;
             tb.shapeSet = TetrisBlock.ShapeSet.BlockBlast;
-            tb.blockBlastType = randomizeType
-                ? (TetrisBlock.BlockBlastType)Random.Range(0, System.Enum.GetValues(typeof(TetrisBlock.BlockBlastType)).Length)
-                : defaultType;
+            // tb.blockBlastType = randomizeType
+            //     ? (TetrisBlock.BlockBlastType)UnityEngine.Random.Range(0, System.Enum.GetValues(typeof(TetrisBlock.BlockBlastType)).Length)
+            //     : defaultType;
+            if (randomizeType)
+            {
+                tb.blockBlastType = GetShapeByDifficulty(currentDifficulty);
+            }
+            else
+            {
+                tb.blockBlastType = defaultType;
+            }
+
             tb.matchGridStyle = true;
             tb.snapToGrid = true;
             tb.generateOnStart = false;
@@ -309,6 +361,97 @@ public class BlockSpawner : MonoBehaviour
         List<TetrisBlock> blocks = new List<TetrisBlock>(FindObjectsOfType<TetrisBlock>());
         hintSystem.ShowHint(blocks);
     }
+
+    /// <summary>
+    /// Sinh block theo độ khó (được AI điều chỉnh)
+    /// </summary>
+    public void SpawnBlockWithDifficulty(BlockDifficulty difficulty)
+    {
+        List<TetrisBlock.BlockBlastType> shapePool = EasyShapes;
+
+        switch (difficulty)
+        {
+            case BlockDifficulty.Medium:
+                shapePool = MediumShapes;
+                break;
+            case BlockDifficulty.Hard:
+                shapePool = HardShapes;
+                break;
+        }
+
+        // Random 1 shape trong nhóm phù hợp độ khó
+        var chosenShape = shapePool[UnityEngine.Random.Range(0, shapePool.Count)];
+
+        Debug.Log($"[AI] Spawning block with difficulty {difficulty}: {chosenShape}");
+
+        // Kiểm tra nếu đang có slot trống
+        if (currentBlocks != null && currentBlocks.Length > 0)
+        {
+            for (int i = 0; i < currentBlocks.Length; i++)
+            {
+                if (currentBlocks[i] == null)
+                {
+                    Vector3 pos = transform.position + new Vector3(i * slotSpacing, 0, 0);
+                    GameObject go = new GameObject($"AI_TetrisBlock_{difficulty}_{i}");
+                    go.transform.position = pos;
+                    go.transform.SetParent(transform);
+
+                    var tb = go.AddComponent<TetrisBlock>();
+                    tb.gridReference = gridReference;
+                    tb.shapeSet = TetrisBlock.ShapeSet.BlockBlast;
+                    tb.blockBlastType = chosenShape;
+                    tb.generateOnStart = false;
+                    tb.randomizeColor = true;
+                    tb.GenerateBlock();
+
+                    currentBlocks[i] = tb;
+                    break;
+                }
+            }
+        }
+    }
+    private TetrisBlock.BlockBlastType GetShapeByDifficulty(BlockDifficulty difficulty)
+    {
+        List<TetrisBlock.BlockBlastType> shapes;
+
+        switch (difficulty)
+        {
+            case BlockDifficulty.Medium:
+                shapes = new List<TetrisBlock.BlockBlastType>
+            {
+                TetrisBlock.BlockBlastType.SmallL,
+                TetrisBlock.BlockBlastType.TShape,
+                TetrisBlock.BlockBlastType.ZShape,
+                TetrisBlock.BlockBlastType.SShape,
+                TetrisBlock.BlockBlastType.Plus
+            };
+                break;
+
+            case BlockDifficulty.Hard:
+                shapes = new List<TetrisBlock.BlockBlastType>
+            {
+                TetrisBlock.BlockBlastType.BigSquare,
+                TetrisBlock.BlockBlastType.Corner3x3,
+                TetrisBlock.BlockBlastType.UShape,
+                TetrisBlock.BlockBlastType.HollowSquare,
+                TetrisBlock.BlockBlastType.CrossX
+            };
+                break;
+
+            default: // Easy
+                shapes = new List<TetrisBlock.BlockBlastType>
+            {
+                TetrisBlock.BlockBlastType.Single,
+                TetrisBlock.BlockBlastType.Square2,
+                TetrisBlock.BlockBlastType.Line3_Vertical,
+                TetrisBlock.BlockBlastType.Line4_Vertical,
+            };
+                break;
+        }
+
+        return shapes[UnityEngine.Random.Range(0, shapes.Count)];
+    }
+
     private void OnDisable()
     {
         if (_spawnCoroutine != null)
