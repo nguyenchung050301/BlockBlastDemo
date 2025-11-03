@@ -12,7 +12,45 @@ using System.Collections;
 public class TetrisBlock : MonoBehaviour
 {
     public enum ShapeSet { BlockBlast, Custom }
-    public enum BlockBlastType { Single, Pair, Square2, Line3, SmallL, Plus, BigSquare }
+    public enum BlockBlastType
+    {
+        // Easy
+        Single,
+        Pair_Horizontal,
+        Pair_Vertical,
+        Square2,
+        Line3_Horizontal,
+        Line3_Vertical,
+
+        // Medium
+        Line4_Horizontal,
+        Line4_Vertical,
+        SmallL,
+        SmallL_R90,
+        SmallL_R180,
+        SmallL_R270,
+        TShape,
+        TShape_R90,
+        ZShape,
+        ZShape_Mirror,
+        SShape,
+        SShape_Mirror,
+        Corner3x3,
+
+        // Hard
+        TallL,
+        Plus,
+        BigSquare,
+        HollowSquare,
+        CrossX,
+        UShape,
+        UShape_R90,
+        L5Shape,
+        L5Shape_R90,
+        TShape_R180,
+        TShape_R270
+    }
+
 
     [Header("Block")]
     public ShapeSet shapeSet = ShapeSet.BlockBlast;
@@ -69,6 +107,13 @@ public class TetrisBlock : MonoBehaviour
     public float scaleTransitionSpeed = 10f; // tốc độ phóng to/thu nhỏ
     private bool isInSpawner = true;      // đánh dấu block đang ở spawner
 
+    public enum BlockDifficulty
+    {
+        Easy,
+        Medium,
+        Hard
+    }
+
     private void Start()
     {
         // khi spawn ra, block sẽ nhỏ hơn gốc
@@ -96,6 +141,21 @@ public class TetrisBlock : MonoBehaviour
             offsets = GetOffsetsForBlockBlast(blockBlastType);
         else
             offsets = GetOffsetsForBlockBlast(blockBlastType);
+
+
+        // --- Căn giữa block sau khi tạo ---
+        Vector3 avg = Vector3.zero;
+        foreach (Transform child in transform)
+        {
+            avg += child.localPosition;
+        }
+        avg /= transform.childCount;
+
+        // Dịch toàn bộ cell về trung tâm block
+        foreach (Transform child in transform)
+        {
+            child.localPosition -= avg;
+        }
 
         // choose color for this block
         _chosenColor = cellColor;
@@ -245,24 +305,200 @@ public class TetrisBlock : MonoBehaviour
     {
         switch (t)
         {
+            // ----- EASY -----
             case BlockBlastType.Single:
                 return new[] { new Vector2Int(0, 0) };
-            case BlockBlastType.Pair:
+
+            case BlockBlastType.Pair_Horizontal:
                 return new[] { new Vector2Int(0, 0), new Vector2Int(1, 0) };
+
+            case BlockBlastType.Pair_Vertical:
+                return new[] { new Vector2Int(0, 0), new Vector2Int(0, 1) };
+
             case BlockBlastType.Square2:
-                return new[] { new Vector2Int(0, 0), new Vector2Int(1, 0), new Vector2Int(0, 1), new Vector2Int(1, 1) };
-            case BlockBlastType.Line3:
-                return new[] { new Vector2Int(-1, 0), new Vector2Int(0, 0), new Vector2Int(1, 0) };
+                return new[]
+                {
+                new Vector2Int(0,0), new Vector2Int(1,0),
+                new Vector2Int(0,1), new Vector2Int(1,1)
+            };
+
+            case BlockBlastType.Line3_Horizontal:
+                return new[]
+                {
+                new Vector2Int(-1,0), new Vector2Int(0,0), new Vector2Int(1,0)
+            };
+
+            case BlockBlastType.Line3_Vertical:
+                return new[]
+                {
+                new Vector2Int(0,-1), new Vector2Int(0,0), new Vector2Int(0,1)
+            };
+
+            // ----- MEDIUM -----
+            case BlockBlastType.Line4_Horizontal:
+                return new[]
+                {
+                new Vector2Int(-1,0), new Vector2Int(0,0), new Vector2Int(1,0), new Vector2Int(2,0)
+            };
+
+            case BlockBlastType.Line4_Vertical:
+                return new[]
+                {
+                new Vector2Int(0,-1), new Vector2Int(0,0), new Vector2Int(0,1), new Vector2Int(0,2)
+            };
+
             case BlockBlastType.SmallL:
-                return new[] { new Vector2Int(0, 0), new Vector2Int(0, 1), new Vector2Int(1, 0) };
+                return new[]
+                {
+                new Vector2Int(0,0), new Vector2Int(0,1), new Vector2Int(1,0)
+            };
+
+            case BlockBlastType.SmallL_R90:
+                return new[]
+                {
+                new Vector2Int(0,0), new Vector2Int(1,0), new Vector2Int(0,-1)
+            };
+
+            case BlockBlastType.SmallL_R180:
+                return new[]
+                {
+                new Vector2Int(0,0), new Vector2Int(0,-1), new Vector2Int(-1,0)
+            };
+
+            case BlockBlastType.SmallL_R270:
+                return new[]
+                {
+                new Vector2Int(0,0), new Vector2Int(-1,0), new Vector2Int(0,1)
+            };
+
+            case BlockBlastType.TShape:
+                return new[]
+                {
+                new Vector2Int(-1,0), new Vector2Int(0,0), new Vector2Int(1,0),
+                new Vector2Int(0,1)
+            };
+
+            case BlockBlastType.TShape_R90:
+                return new[]
+                {
+                new Vector2Int(0,0), new Vector2Int(0,1), new Vector2Int(0,-1),
+                new Vector2Int(1,0)
+            };
+
+            case BlockBlastType.ZShape:
+                return new[]
+                {
+                new Vector2Int(-1,0), new Vector2Int(0,0),
+                new Vector2Int(0,1), new Vector2Int(1,1)
+            };
+
+            case BlockBlastType.ZShape_Mirror:
+                return new[]
+                {
+                new Vector2Int(1,0), new Vector2Int(0,0),
+                new Vector2Int(0,1), new Vector2Int(-1,1)
+            };
+
+            case BlockBlastType.SShape:
+                return new[]
+                {
+                new Vector2Int(-1,1), new Vector2Int(0,1),
+                new Vector2Int(0,0), new Vector2Int(1,0)
+            };
+
+            case BlockBlastType.SShape_Mirror:
+                return new[]
+                {
+                new Vector2Int(-1,0), new Vector2Int(0,0),
+                new Vector2Int(0,1), new Vector2Int(1,1)
+            };
+
+            case BlockBlastType.Corner3x3:
+                return new[]
+                {
+                new Vector2Int(-1,-1), new Vector2Int(0,-1), new Vector2Int(1,-1),
+                new Vector2Int(-1,0), new Vector2Int(-1,1)
+            };
+
+            // ----- HARD -----
+            case BlockBlastType.TallL:
+                return new[]
+                {
+                new Vector2Int(0,0), new Vector2Int(0,1), new Vector2Int(0,2), new Vector2Int(1,0)
+            };
+
             case BlockBlastType.Plus:
-                return new[] { new Vector2Int(0, 0), new Vector2Int(-1, 0), new Vector2Int(1, 0), new Vector2Int(0, -1), new Vector2Int(0, 1) };
+                return new[]
+                {
+                new Vector2Int(0,0),
+                new Vector2Int(-1,0), new Vector2Int(1,0),
+                new Vector2Int(0,-1), new Vector2Int(0,1)
+            };
+
             case BlockBlastType.BigSquare:
-                return new[] {
-                    new Vector2Int(-1, -1), new Vector2Int(0, -1), new Vector2Int(1, -1),
-                    new Vector2Int(-1, 0), new Vector2Int(0, 0), new Vector2Int(1, 0),
-                    new Vector2Int(-1, 1), new Vector2Int(0, 1), new Vector2Int(1, 1)
-                };
+                return new[]
+                {
+                new Vector2Int(-1,-1), new Vector2Int(0,-1), new Vector2Int(1,-1),
+                new Vector2Int(-1,0),  new Vector2Int(0,0),  new Vector2Int(1,0),
+                new Vector2Int(-1,1),  new Vector2Int(0,1),  new Vector2Int(1,1)
+            };
+
+            case BlockBlastType.HollowSquare:
+                return new[]
+                {
+                new Vector2Int(-1,-1), new Vector2Int(0,-1), new Vector2Int(1,-1),
+                new Vector2Int(-1,0), new Vector2Int(1,0),
+                new Vector2Int(-1,1), new Vector2Int(0,1), new Vector2Int(1,1)
+            };
+
+            case BlockBlastType.CrossX:
+                return new[]
+                {
+                new Vector2Int(-1,-1), new Vector2Int(1,-1),
+                new Vector2Int(0,0),
+                new Vector2Int(-1,1), new Vector2Int(1,1)
+            };
+
+            case BlockBlastType.UShape:
+                return new[]
+                {
+                new Vector2Int(-1,-1), new Vector2Int(0,-1), new Vector2Int(1,-1),
+                new Vector2Int(-1,0), new Vector2Int(1,0)
+            };
+
+            case BlockBlastType.UShape_R90:
+                return new[]
+                {
+                new Vector2Int(-1,1), new Vector2Int(-1,0), new Vector2Int(-1,-1),
+                new Vector2Int(0,1), new Vector2Int(0,-1)
+            };
+
+            case BlockBlastType.L5Shape:
+                return new[]
+                {
+                new Vector2Int(0,0), new Vector2Int(0,1), new Vector2Int(0,2), new Vector2Int(0,3), new Vector2Int(1,0)
+            };
+
+            case BlockBlastType.L5Shape_R90:
+                return new[]
+                {
+                new Vector2Int(0,0), new Vector2Int(1,0), new Vector2Int(2,0), new Vector2Int(3,0), new Vector2Int(0,1)
+            };
+
+            case BlockBlastType.TShape_R180:
+                return new[]
+                {
+                new Vector2Int(-1,0), new Vector2Int(0,0), new Vector2Int(1,0),
+                new Vector2Int(0,-1)
+            };
+
+            case BlockBlastType.TShape_R270:
+                return new[]
+                {
+                new Vector2Int(0,0), new Vector2Int(0,1), new Vector2Int(0,-1),
+                new Vector2Int(-1,0)
+            };
+
             default:
                 return new[] { new Vector2Int(0, 0) };
         }
@@ -798,6 +1034,43 @@ public class TetrisBlock : MonoBehaviour
     {
         return _lastOffsets != null ? _lastOffsets : new Vector2Int[0];
     }
+
+    public static BlockDifficulty GetDifficultyForShape(BlockBlastType type)
+    {
+        switch (type)
+        {
+            // Easy
+            case BlockBlastType.Single:
+            case BlockBlastType.Pair_Horizontal:
+            case BlockBlastType.Pair_Vertical:
+            case BlockBlastType.Square2:
+            case BlockBlastType.Line3_Horizontal:
+            case BlockBlastType.Line3_Vertical:
+                return BlockDifficulty.Easy;
+
+            // Medium
+            case BlockBlastType.Line4_Horizontal:
+            case BlockBlastType.Line4_Vertical:
+            case BlockBlastType.SmallL:
+            case BlockBlastType.SmallL_R90:
+            case BlockBlastType.SmallL_R180:
+            case BlockBlastType.SmallL_R270:
+            case BlockBlastType.TShape:
+            case BlockBlastType.TShape_R90:
+            case BlockBlastType.ZShape:
+            case BlockBlastType.ZShape_Mirror:
+            case BlockBlastType.SShape:
+            case BlockBlastType.SShape_Mirror:
+            case BlockBlastType.Corner3x3:
+                return BlockDifficulty.Medium;
+
+            // Hard
+            default:
+                return BlockDifficulty.Hard;
+        }
+    }
+
+
     public Sprite GetPixelSprite()
     {
         EnsurePixelSprite();
