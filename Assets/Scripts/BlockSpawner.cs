@@ -1,3 +1,5 @@
+
+using System.Collections.Generic;
 using System.Collections;
 using UnityEngine;
 
@@ -59,9 +61,10 @@ public class BlockSpawner : MonoBehaviour
 
     // Vị trí gốc của slot đầu tiên (tính từ transform của spawner)
     public Vector3 slotBaseOffset = new Vector3(0, 0, 0);
-
+    public HintSystem hintSystem;
     private void Start()
     {
+        hintSystem = new HintSystem(gridReference);
         // Try to find grid reference if not set
         if (gridReference == null)
             gridReference = FindObjectOfType<GridGenerator>();
@@ -301,7 +304,11 @@ public class BlockSpawner : MonoBehaviour
 
         return new Vector3(spawnX, spawnY, 0f);
     }
-
+    public void OnHintButtonPressed()
+    {
+        List<TetrisBlock> blocks = new List<TetrisBlock>(FindObjectsOfType<TetrisBlock>());
+        hintSystem.ShowHint(blocks);
+    }
     private void OnDisable()
     {
         if (_spawnCoroutine != null)

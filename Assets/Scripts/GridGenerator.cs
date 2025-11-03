@@ -39,9 +39,12 @@ public class GridGenerator : MonoBehaviour, IGridOccupancy
 
     private const string CellsParentName = "_Grid_Cells";
     private const string LinesParentName = "_Grid_Lines";
+    private bool[,] occupancy;
 
     private void Start()
     {
+        occupancy = new bool[cols, rows];
+
         if (generateOnStart)
             GenerateGrid();
     }
@@ -715,6 +718,67 @@ public class GridGenerator : MonoBehaviour, IGridOccupancy
             block.RefreshSortingOrder();
         }
     }
+
+    public List<Vector2Int> GetAllValidPositions(TetrisBlock block)
+    {
+        List<Vector2Int> positions = new List<Vector2Int>();
+        for (int x = 0; x < cols; x++)
+            for (int y = 0; y < rows; y++)
+                if (CanPlace(block, x, y))
+                    positions.Add(new Vector2Int(x, y));
+        return positions;
+    }
+    public bool[,] CloneOccupancy()
+    {
+        bool[,] copy = new bool[cols, rows];
+        for (int x = 0; x < cols; x++)
+            for (int y = 0; y < rows; y++)
+                copy[x, y] = occupancy[x, y];
+        return copy;
+    }
+
+    public int CountFullLines(bool[,] gridState)
+    {
+        int count = 0;
+        for (int y = 0; y < rows; y++)
+        {
+            bool full = true;
+            for (int x = 0; x < cols; x++)
+            {
+                if (!gridState[x, y])
+                {
+                    full = false;
+                    break;
+                }
+            }
+            if (full) count++;
+        }
+        return count;
+    }
+
+    public int CountEmptyHoles(bool[,] gridState)
+    {
+        int count = 0;
+        for (int y = 0; y < rows; y++)
+            for (int x = 0; x < cols; x++)
+                if (!gridState[x, y])
+                    count++;
+        return count;
+    }
+    public bool CanPlace(TetrisBlock block, int gx, int gy)
+    {
+        foreach (var off in block.GetOffsets())
+        {
+            int cx = gx + off.x;
+            int cy = gy + off.y;
+            if (cx < 0 || cy < 0 || cx >= cols || cy >= rows)
+                return false;
+            if (IsCellOccupied(cx, cy))
+                return false;
+        }
+        return true;
+    }
+
 
     private void EnsurePixelSprite()
     {

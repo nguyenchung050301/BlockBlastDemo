@@ -794,6 +794,16 @@ public class TetrisBlock : MonoBehaviour
             }
         }
     }
+    public Vector2Int[] GetOffsets()
+    {
+        return _lastOffsets != null ? _lastOffsets : new Vector2Int[0];
+    }
+    public Sprite GetPixelSprite()
+    {
+        EnsurePixelSprite();
+        return s_pixelSprite;
+    }
+
     // private IEnumerator ScaleTo(Vector3 targetScale)
     // {
     //     while (Vector3.Distance(transform.localScale, targetScale) > 0.001f)
