@@ -1,6 +1,7 @@
 using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 /// <summary>
 /// Generates a 2D grid of square cells and draws grid lines.
 /// Usage: Attach to a GameObject in the scene and press the "Generate Grid" context menu or enable Generate On Start.
@@ -128,6 +129,9 @@ public class GridGenerator : MonoBehaviour, IGridOccupancy
             ClearColumn(x);
         }
         //   Debug.Log($"cellRenderers[{x},{y}] = {(cellRenderers[x, y] != null ? "OK" : "NULL")}");
+        // Sau khi xóa hàng/cột xong -> căn lại toàn bộ block
+        RealignPlacedBlocks();
+
     }
 
     /// <summary>
@@ -334,11 +338,15 @@ public class GridGenerator : MonoBehaviour, IGridOccupancy
 
         foreach (var block in allBlocks)
         {
-            // SKIP nếu block vẫn draggable (vẫn đang ở spawner hoặc chưa đặt)
+            // Bỏ qua block chưa được đặt vào grid
+            if (block == null) continue;
             if (block.draggable) continue;
-
-            // SKIP nếu block không thuộc grid này (an toàn khi nhiều grid tồn tại)
             if (block.gridReference != this) continue;
+
+            // Thêm kiểm tra an toàn — chỉ xóa nếu block thực sự "đang nằm trên grid"
+            if (!IsBlockPlacedOnGrid(block))
+                continue;
+
 
             var cellsParent = block.transform.Find(cellsParentName);
             if (cellsParent == null) continue;
@@ -353,8 +361,8 @@ public class GridGenerator : MonoBehaviour, IGridOccupancy
                 if (sr == null) continue; // không phải ô hiển thị -> skip
 
                 Vector3 worldPos = cell.position;
-                int gridX = Mathf.RoundToInt((worldPos.x - gridOrigin.x) / cellSize);
-                int gridY = Mathf.RoundToInt((worldPos.y - gridOrigin.y) / cellSize);
+                int gridX = Mathf.FloorToInt((worldPos.x - gridOrigin.x) / cellSize);
+                int gridY = Mathf.FloorToInt((worldPos.y - gridOrigin.y) / cellSize);
 
                 // Only consider cells that actually map inside this grid
                 if (gridX < 0 || gridX >= cols || gridY < 0 || gridY >= rows) continue;
@@ -365,17 +373,15 @@ public class GridGenerator : MonoBehaviour, IGridOccupancy
                 }
             }
 
-            // Start fade+destroy cho từng ô cần xóa
-            foreach (var t in toDelete)
-            {
-                StartCoroutine(FadeAndDestroyCell(t.gameObject));
-            }
-
-            // Nếu sau một khoảng thời gian ô con đã hết (block rỗng), xóa luôn parent block
             if (toDelete.Count > 0)
             {
-                StartCoroutine(DestroyBlockIfEmptyAfterDelay(cellsParent, block.gameObject, 0.4f));
+                StartCoroutine(ClearCellAndDestroyBlockSafe(
+                    toDelete.Select(t => t.gameObject).ToList(),
+                    cellsParent,
+                    block.gameObject
+                ));
             }
+
         }
     }
 
@@ -390,11 +396,15 @@ public class GridGenerator : MonoBehaviour, IGridOccupancy
 
         foreach (var block in allBlocks)
         {
-            // SKIP nếu block vẫn draggable (vẫn đang ở spawner hoặc chưa đặt)
+            // Bỏ qua block chưa được đặt vào grid
+            if (block == null) continue;
             if (block.draggable) continue;
-
-            // SKIP nếu block không thuộc grid này
             if (block.gridReference != this) continue;
+
+            // Thêm kiểm tra an toàn — chỉ xóa nếu block thực sự "đang nằm trên grid"
+            if (!IsBlockPlacedOnGrid(block))
+                continue;
+
 
             var cellsParent = block.transform.Find(cellsParentName);
             if (cellsParent == null) continue;
@@ -420,15 +430,15 @@ public class GridGenerator : MonoBehaviour, IGridOccupancy
                 }
             }
 
-            foreach (var t in toDelete)
-            {
-                StartCoroutine(FadeAndDestroyCell(t.gameObject));
-            }
-
             if (toDelete.Count > 0)
             {
-                StartCoroutine(DestroyBlockIfEmptyAfterDelay(cellsParent, block.gameObject, 0.4f));
+                StartCoroutine(ClearCellAndDestroyBlockSafe(
+                    toDelete.Select(t => t.gameObject).ToList(),
+                    cellsParent,
+                    block.gameObject
+                ));
             }
+
         }
     }
 
@@ -480,6 +490,231 @@ public class GridGenerator : MonoBehaviour, IGridOccupancy
         Destroy(cell);
     }
 
+    // --- Fade đồng bộ và xóa block an toàn ---
+    private IEnumerator ClearCellAndDestroyBlockSafe(List<GameObject> cells, Transform cellsParent, GameObject blockGO)
+    {
+        if (cells == null || cells.Count == 0) yield break;
+
+        // ✅ XÓA LINE CỦA CÁC CELL BỊ MERGE
+        foreach (var cell in cells)
+        {
+            if (cell == null) continue;
+
+            Transform block = cell.transform.parent?.parent;
+            if (block == null) continue;
+
+            Transform linesParent = block.Find("_Block_Lines");
+            if (linesParent == null) continue;
+
+            Vector3 cellPos = cell.transform.position;
+            float tolerance = cellSize * 0.51f; // gần 1 cell
+
+            List<Transform> lineToDelete = new List<Transform>();
+            foreach (Transform line in linesParent)
+            {
+                if (line == null) continue;
+                Vector3 linePos = line.position;
+
+                // nếu line nằm sát hoặc giao cell → xóa line
+                if (Vector3.Distance(linePos, cellPos) < tolerance)
+                    lineToDelete.Add(line);
+            }
+
+            foreach (var l in lineToDelete)
+            {
+                if (l != null)
+                    Destroy(l.gameObject);
+            }
+        }
+        // ✅ HẾT PHẦN XÓA LINE
+
+        // Sau khi đã xóa các cell và block liên quan:
+        yield return new WaitForSeconds(0); // đảm bảo các Destroy() thực hiện xong
+
+        // ✅ Vẽ lại line cho toàn bộ grid để tránh mất viền
+        RebuildAllBlockLines();
+
+
+
+        // ---- phần fade và destroy cell như cũ ----
+        float duration = 0.3f;
+        float t = 0f;
+        List<SpriteRenderer> renderers = new List<SpriteRenderer>();
+        foreach (var c in cells)
+        {
+            if (c == null) continue;
+            var sr = c.GetComponent<SpriteRenderer>();
+            if (sr != null) renderers.Add(sr);
+        }
+
+        // fade đồng thời tất cả cell
+        while (t < duration)
+        {
+            t += Time.deltaTime;
+            float a = Mathf.Lerp(1f, 0f, t / duration);
+            foreach (var sr in renderers)
+            {
+                if (sr != null)
+                {
+                    Color col = sr.color;
+                    sr.color = new Color(col.r, col.g, col.b, a);
+                }
+            }
+            yield return null;
+        }
+
+        // xoá cell sau fade
+        foreach (var c in cells)
+        {
+            if (c != null)
+                Destroy(c);
+        }
+
+        yield return new WaitForEndOfFrame();
+
+        // nếu block trống => xoá luôn
+        if (cellsParent == null) yield break;
+        if (cellsParent.childCount == 0 && blockGO != null)
+            Destroy(blockGO);
+
+
+    }
+
+    private bool IsBlockPlacedOnGrid(TetrisBlock block)
+    {
+        if (block == null || block.gridReference != this)
+            return false;
+
+        // Kiểm tra: nếu bất kỳ ô của block nằm trong vùng grid -> coi là đã đặt
+        float cell = cellSize;
+        float totalW = cols * cell;
+        float totalH = rows * cell;
+        Vector2 gOrigin = new Vector2(-totalW / 2f + cell / 2f, -totalH / 2f + cell / 2f);
+        Vector2 worldOrigin = (Vector2)transform.position + gOrigin;
+
+        Vector3 blockPos = block.transform.position;
+        Vector2 localToOrigin = (Vector2)blockPos - worldOrigin;
+        int gx = Mathf.RoundToInt(localToOrigin.x / cell);
+        int gy = Mathf.RoundToInt(localToOrigin.y / cell);
+
+        return gx >= 0 && gx < cols && gy >= 0 && gy < rows;
+    }
+    // --- Snap tất cả block đang trên grid về đúng tọa độ cell ---
+    /*************  ✨ Windsurf Command ⭐  *************/
+    /// <summary>
+    /// Ensures that the static pixel sprite is created if it is null.
+    /// The pixel sprite is used to draw the grid lines.
+    /// </summary>
+    /*******  6c0585fb-f54c-4cb2-b896-9c3448fcff33  *******/
+    private void RealignPlacedBlocks()
+    {
+        float cell = cellSize;
+        float totalW = cols * cell;
+        float totalH = rows * cell;
+        Vector2 gOrigin = new Vector2(-totalW / 2f + cell / 2f, -totalH / 2f + cell / 2f);
+        Vector2 worldOrigin = (Vector2)transform.position + gOrigin;
+
+        foreach (var block in FindObjectsOfType<TetrisBlock>())
+        {
+            if (block == null) continue;
+            if (block.gridReference != this) continue;
+            if (block.draggable) continue; // bỏ qua block chưa được đặt
+            if (!IsBlockPlacedOnGrid(block)) continue;
+
+            Vector3 pos = block.transform.position;
+
+            // Snap chính xác theo lưới (không trôi float)
+            float snappedX = Mathf.Round((pos.x - worldOrigin.x) / cell) * cell + worldOrigin.x;
+            float snappedY = Mathf.Round((pos.y - worldOrigin.y) / cell) * cell + worldOrigin.y;
+            block.transform.position = new Vector3(snappedX, snappedY, pos.z);
+        }
+    }
+
+    private void DeleteCorrespondingLinesForCell(GameObject cell)
+    {
+        if (cell == null) return;
+
+        // tìm block cha
+        Transform block = cell.transform.parent?.parent;
+        if (block == null) return;
+
+        Transform linesParent = block.Find("_Block_Lines");
+        if (linesParent == null) return;
+
+        // vị trí cell (so sánh bằng khoảng cách nhỏ)
+        Vector3 cellPos = cell.transform.position;
+        float tolerance = cellSize * 0.51f; // khoảng gần 1 cell
+
+        // duyệt tất cả line trong block
+        List<Transform> toDelete = new List<Transform>();
+        foreach (Transform line in linesParent)
+        {
+            if (line == null) continue;
+            Vector3 linePos = line.position;
+
+            // nếu line nằm sát hoặc giao cell → xóa line
+            if (Vector3.Distance(linePos, cellPos) < tolerance)
+                toDelete.Add(line);
+        }
+
+        foreach (var l in toDelete)
+        {
+            if (l != null)
+                Destroy(l.gameObject);
+        }
+    }
+    private void RebuildAllBlockLines()
+    {
+        foreach (var block in FindObjectsOfType<TetrisBlock>())
+        {
+            if (block == null) continue;
+            if (block.draggable) continue; // chỉ block đã được đặt trên grid
+
+            // Xóa tất cả line cũ và tạo lại line mới cho từng cell
+            Transform linesParent = block.transform.Find("_Block_Lines");
+            if (linesParent != null)
+            {
+                foreach (Transform child in linesParent)
+                    Destroy(child.gameObject);
+            }
+
+            // Gọi lại hàm vẽ line (giống logic trong GenerateBlock)
+            Transform cellsParent = block.transform.Find("_Block_Cells");
+            if (cellsParent == null) continue;
+
+            foreach (Transform cell in cellsParent)
+            {
+                if (cell == null) continue;
+                Vector2 cellPos = cell.localPosition;
+                float cellSize = block.cellSize;
+                Color lineColor = block.internalLineColor;
+                float thick = block.internalLineThickness;
+
+                block.CreateLine(linesParent,
+                    new Vector2(cellPos.x, cellPos.y + cellSize / 2f),
+                    new Vector2(cellSize, thick),
+                    lineColor, 4);
+
+                block.CreateLine(linesParent,
+                    new Vector2(cellPos.x, cellPos.y - cellSize / 2f),
+                    new Vector2(cellSize, thick),
+                    lineColor, 4);
+
+                block.CreateLine(linesParent,
+                    new Vector2(cellPos.x - cellSize / 2f, cellPos.y),
+                    new Vector2(thick, cellSize),
+                    lineColor, 4);
+
+                block.CreateLine(linesParent,
+                    new Vector2(cellPos.x + cellSize / 2f, cellPos.y),
+                    new Vector2(thick, cellSize),
+                    lineColor, 4);
+            }
+
+            // Cập nhật sorting order
+            block.RefreshSortingOrder();
+        }
+    }
 
     private void EnsurePixelSprite()
     {

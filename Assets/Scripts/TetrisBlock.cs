@@ -1,4 +1,7 @@
 using UnityEngine;
+using System.Linq;
+using System.Collections.Generic;
+using System.Collections;
 
 /// <summary>
 /// Generates a tetromino-like block composed of square cells (like Tetris pieces).
@@ -60,8 +63,18 @@ public class TetrisBlock : MonoBehaviour
     private string _originalSortingLayer;
     private const string DraggingSortingLayer = "DraggingBlock";
 
+    [Header("Scale settings")]
+    public float spawnerScale = 0.8f;     // scale khi ở spawner
+    public float gridScale = 1.0f;        // scale khi đặt vào grid
+    public float scaleTransitionSpeed = 10f; // tốc độ phóng to/thu nhỏ
+    private bool isInSpawner = true;      // đánh dấu block đang ở spawner
+
     private void Start()
     {
+        // khi spawn ra, block sẽ nhỏ hơn gốc
+        transform.localScale = Vector3.one * spawnerScale;
+        isInSpawner = true;
+
         if (generateOnStart)
             GenerateBlock();
     }
@@ -69,6 +82,8 @@ public class TetrisBlock : MonoBehaviour
     [ContextMenu("Generate Block")]
     public void GenerateBlock()
     {
+
+
         EnsurePixelSprite();
 
         Transform cellsParent = GetOrCreateChild(transform, CellsParentName);
@@ -179,18 +194,32 @@ public class TetrisBlock : MonoBehaviour
         {
             // Draw four lines around each cell so every block cell is individually outlined.
             // This will draw top/bottom/left/right for each cell (duplicates may overlap for adjacent cells).
-            foreach (var off in offsets)
+            foreach (Vector2Int off in offsets)
             {
-                Vector3 cellPos = new Vector3(off.x * cellSize, off.y * cellSize, 0f);
+                Vector2 cellPos = new Vector2(off.x * cellSize, off.y * cellSize);
+                // Tạo 4 line (top, bottom, left, right) cho mỗi ô vuông
+                CreateLine(linesParent,
+                    new Vector2(cellPos.x, cellPos.y + cellSize / 2f),
+                    new Vector2(cellSize, internalLineThickness),
+                    internalLineColor, 4); // top
 
-                // top edge
-                CreateLine(linesParent, new Vector2(cellPos.x, cellPos.y + cellSize / 2f), new Vector2(cellSize, internalLineThickness), internalLineColor, 3);
-                // bottom edge
-                CreateLine(linesParent, new Vector2(cellPos.x, cellPos.y - cellSize / 2f), new Vector2(cellSize, internalLineThickness), internalLineColor, 3);
-                // left edge
-                CreateLine(linesParent, new Vector2(cellPos.x - cellSize / 2f, cellPos.y), new Vector2(internalLineThickness, cellSize), internalLineColor, 3);
-                // right edge
-                CreateLine(linesParent, new Vector2(cellPos.x + cellSize / 2f, cellPos.y), new Vector2(internalLineThickness, cellSize), internalLineColor, 3);
+                CreateLine(linesParent,
+                    new Vector2(cellPos.x, cellPos.y - cellSize / 2f),
+                    new Vector2(cellSize, internalLineThickness),
+                    internalLineColor, 4); // bottom
+
+                CreateLine(linesParent,
+                    new Vector2(cellPos.x - cellSize / 2f, cellPos.y),
+                    new Vector2(internalLineThickness, cellSize),
+                    internalLineColor, 4); // left
+
+                CreateLine(linesParent,
+                    new Vector2(cellPos.x + cellSize / 2f, cellPos.y),
+                    new Vector2(internalLineThickness, cellSize),
+                    internalLineColor, 4); // right
+
+
+
             }
         }
     }
@@ -311,7 +340,7 @@ public class TetrisBlock : MonoBehaviour
     }
 
     // Creates a simple rectangular line sprite (uses the same 1x1 pixel sprite as cells).
-    private void CreateLine(Transform parent, Vector2 localPos, Vector2 size, Color color, int sortingOrder = 0)
+    public void CreateLine(Transform parent, Vector2 localPos, Vector2 size, Color color, int sortingOrder = 0)
     {
         GameObject line = new GameObject("line");
         line.transform.SetParent(parent, false);
@@ -320,7 +349,7 @@ public class TetrisBlock : MonoBehaviour
         var sr = line.AddComponent<SpriteRenderer>();
         sr.sprite = s_pixelSprite;
         sr.color = color;
-        sr.sortingOrder = sortingOrder;
+        sr.sortingOrder = sortingOrder + 1; // ensure lines render above cells
         line.transform.localScale = new Vector3(size.x, size.y, 1f);
     }
 
@@ -331,6 +360,16 @@ public class TetrisBlock : MonoBehaviour
 
     private void OnMouseDown()
     {
+
+
+        // Nếu đang ở spawner mà block đã di chuyển xa khỏi vị trí ban đầu -> phóng to
+        if (isInSpawner && Vector3.Distance(transform.position, _dragStartPosition) > 0.1f)
+        {
+            transform.localScale = Vector3.one * gridScale;
+            isInSpawner = false;
+        }
+
+
         if (!draggable) return;
         if (!Application.isPlaying) return;
         _cam = Camera.main;
@@ -344,19 +383,46 @@ public class TetrisBlock : MonoBehaviour
         _dragOffsetWorld = transform.position - mouseWorld;
 
         // Khi bắt đầu kéo: tăng sorting order và đổi sang layer DraggingBlock
-        foreach (var sr in GetComponentsInChildren<SpriteRenderer>())
+        Transform cellsParent = transform.Find("_Block_Cells");
+        Transform linesParent = transform.Find("_Block_Lines");
+
+        // Cell dưới
+        if (cellsParent != null)
         {
-            _originalSortingOrder = sr.sortingOrder;
-            _originalSortingLayer = sr.sortingLayerName;
-            sr.sortingLayerName = DraggingSortingLayer;
-            sr.sortingOrder = 500; // đảm bảo nổi lên trên tất cả block khác
+            foreach (var sr in cellsParent.GetComponentsInChildren<SpriteRenderer>())
+            {
+                _originalSortingOrder = sr.sortingOrder;
+                _originalSortingLayer = sr.sortingLayerName;
+                sr.sortingLayerName = DraggingSortingLayer;
+                sr.sortingOrder = 500; // cell
+            }
         }
+
+        // Line trên
+        if (linesParent != null)
+        {
+            foreach (var sr in linesParent.GetComponentsInChildren<SpriteRenderer>())
+            {
+                _originalSortingOrder = sr.sortingOrder;
+                _originalSortingLayer = sr.sortingLayerName;
+                sr.sortingLayerName = DraggingSortingLayer;
+                sr.sortingOrder = 501; // line cao hơn cell
+            }
+        }
+
 
 
     }
 
     private void OnMouseDrag()
     {
+        // Nếu đang ở spawner mà block đã di chuyển xa khỏi vị trí ban đầu -> phóng to
+        if (isInSpawner && Vector3.Distance(transform.position, _dragStartPosition) > 0.1f)
+        {
+            transform.localScale = Vector3.one * gridScale;
+            isInSpawner = false;
+        }
+
         if (!draggable) return;
         if (!Application.isPlaying) return;
         if (_cam == null) _cam = Camera.main;
@@ -373,55 +439,65 @@ public class TetrisBlock : MonoBehaviour
         if (!draggable) return;
         if (!Application.isPlaying) return;
 
-        // Nếu không có gridReference hoặc điểm thả không nằm trong vùng lưới -> revert ngay
+        // Nếu không có grid hoặc thả ra ngoài vùng grid → revert về spawner
         if (gridReference == null || !IsReleasedInsideGrid(transform.position))
         {
             transform.position = initialPosition;
 
-            // Sau khi thả chuột: trả sorting layer và order về như cũ
             foreach (var sr in GetComponentsInChildren<SpriteRenderer>())
             {
                 sr.sortingLayerName = _originalSortingLayer;
                 sr.sortingOrder = _originalSortingOrder;
             }
 
+            transform.localScale = Vector3.one * spawnerScale;
+            isInSpawner = true;
 
-
+            RefreshSortingOrder();
             ClearPreview();
             return;
         }
 
-        // Điểm thả nằm trong vùng lưới: thử snap & đặt
+        // Thử snap vào grid
         bool snapSuccessful = SnapToGrid();
 
         if (snapSuccessful && CanPlaceOnGrid())
         {
+            // ✅ Đặt thành công lên grid
             PlaceOnGrid();
-            // block đã đặt cố định
             draggable = false;
 
-            // ✅ Sau khi snap thành công, trả lại layer & order gốc
             foreach (var sr in GetComponentsInChildren<SpriteRenderer>())
             {
                 sr.sortingLayerName = _originalSortingLayer;
                 sr.sortingOrder = _originalSortingOrder;
             }
+
+            // giữ nguyên kích thước to
+            transform.localScale = Vector3.one * gridScale;
+            isInSpawner = false;
         }
         else
         {
-            // nếu snap không thành công hoặc vị trí đã bị chiếm -> revert
+            // ❌ Bất kỳ trường hợp nào snap thất bại (dù đang trong vùng grid)
+            // → revert vị trí, thu nhỏ lại
             transform.position = initialPosition;
 
-            // ✅ Sau khi snap thất bại, trả lại layer & order gốc
             foreach (var sr in GetComponentsInChildren<SpriteRenderer>())
             {
                 sr.sortingLayerName = _originalSortingLayer;
                 sr.sortingOrder = _originalSortingOrder;
             }
+
+            // ✅ Thu nhỏ lại ngay lập tức
+            transform.localScale = Vector3.one * spawnerScale;
+            isInSpawner = true;
         }
 
+        RefreshSortingOrder();
         ClearPreview();
     }
+
 
     public bool SnapToGrid()
     {
@@ -693,5 +769,43 @@ public class TetrisBlock : MonoBehaviour
 
         return (gx >= 0 && gx < cols && gy >= 0 && gy < rows);
     }
+    // --- Đảm bảo line luôn render trên cell ---
+    public void RefreshSortingOrder()
+    {
+        // cells parent
+        Transform cellsParent = transform.Find("_Block_Cells");
+        if (cellsParent != null)
+        {
+            foreach (var sr in cellsParent.GetComponentsInChildren<SpriteRenderer>())
+            {
+                if (sr != null)
+                    sr.sortingOrder = 2; // cell thấp hơn
+            }
+        }
+
+        // lines parent
+        Transform linesParent = transform.Find("_Block_Lines");
+        if (linesParent != null)
+        {
+            foreach (var sr in linesParent.GetComponentsInChildren<SpriteRenderer>())
+            {
+                if (sr != null)
+                    sr.sortingOrder = 4; // line cao hơn
+            }
+        }
+    }
+    // private IEnumerator ScaleTo(Vector3 targetScale)
+    // {
+    //     while (Vector3.Distance(transform.localScale, targetScale) > 0.001f)
+    //     {
+    //         transform.localScale = Vector3.Lerp(
+    //             transform.localScale,
+    //             targetScale,
+    //             Time.deltaTime * scaleTransitionSpeed
+    //         );
+    //         yield return null;
+    //     }
+    //     transform.localScale = targetScale;
+    // }
 
 }
