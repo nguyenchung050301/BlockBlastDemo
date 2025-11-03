@@ -367,6 +367,26 @@ public class BlockSpawner : MonoBehaviour
     /// </summary>
     public void SpawnBlockWithDifficulty(BlockDifficulty difficulty)
     {
+        // 🔒 Chỉ spawn nếu tất cả slot đã trống
+        if (currentBlocks != null)
+        {
+            bool hasActive = false;
+            foreach (var b in currentBlocks)
+            {
+                if (b != null)
+                {
+                    hasActive = true;
+                    break;
+                }
+            }
+
+            if (hasActive)
+            {
+                Debug.Log("[Spawner] Still have active blocks → Skip spawning.");
+                return;
+            }
+        }
+
         List<TetrisBlock.BlockBlastType> shapePool = EasyShapes;
 
         switch (difficulty)
@@ -379,37 +399,30 @@ public class BlockSpawner : MonoBehaviour
                 break;
         }
 
-        // Random 1 shape trong nhóm phù hợp độ khó
-        var chosenShape = shapePool[UnityEngine.Random.Range(0, shapePool.Count)];
-
-        Debug.Log($"[AI] Spawning block with difficulty {difficulty}: {chosenShape}");
-
-        // Kiểm tra nếu đang có slot trống
-        if (currentBlocks != null && currentBlocks.Length > 0)
+        // Random 3 block mới
+        for (int i = 0; i < currentBlocks.Length; i++)
         {
-            for (int i = 0; i < currentBlocks.Length; i++)
-            {
-                if (currentBlocks[i] == null)
-                {
-                    Vector3 pos = transform.position + new Vector3(i * slotSpacing, 0, 0);
-                    GameObject go = new GameObject($"AI_TetrisBlock_{difficulty}_{i}");
-                    go.transform.position = pos;
-                    go.transform.SetParent(transform);
+            var chosenShape = shapePool[UnityEngine.Random.Range(0, shapePool.Count)];
+            Vector3 pos = transform.position + new Vector3(i * slotSpacing, 0, 0);
 
-                    var tb = go.AddComponent<TetrisBlock>();
-                    tb.gridReference = gridReference;
-                    tb.shapeSet = TetrisBlock.ShapeSet.BlockBlast;
-                    tb.blockBlastType = chosenShape;
-                    tb.generateOnStart = false;
-                    tb.randomizeColor = true;
-                    tb.GenerateBlock();
+            GameObject go = new GameObject($"AI_TetrisBlock_{difficulty}_{i}");
+            go.transform.position = pos;
+            go.transform.SetParent(transform);
 
-                    currentBlocks[i] = tb;
-                    break;
-                }
-            }
+            var tb = go.AddComponent<TetrisBlock>();
+            tb.gridReference = gridReference;
+            tb.shapeSet = TetrisBlock.ShapeSet.BlockBlast;
+            tb.blockBlastType = chosenShape;
+            tb.generateOnStart = false;
+            tb.randomizeColor = true;
+            tb.GenerateBlock();
+
+            currentBlocks[i] = tb;
         }
+
+        Debug.Log($"[Spawner] Spawned 3 new blocks with difficulty: {difficulty}");
     }
+
     private TetrisBlock.BlockBlastType GetShapeByDifficulty(BlockDifficulty difficulty)
     {
         List<TetrisBlock.BlockBlastType> shapes;
