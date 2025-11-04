@@ -244,6 +244,12 @@ public class BlockSpawner : MonoBehaviour
     /// </summary>
     private void SpawnNewSet()
     {
+
+        // 🔹 Hỏi AI độ khó hiện tại
+        var ai = FindObjectOfType<AIBlockBalancer>();
+        if (ai != null)
+            currentDifficulty = ai.GetCurrentDifficulty();
+
         // Nếu mảng chưa được khởi tạo
         if (currentBlocks == null || currentBlocks.Length != slotCount)
             InitializeSlots();
@@ -269,7 +275,9 @@ public class BlockSpawner : MonoBehaviour
             //     : defaultType;
             if (randomizeType)
             {
-                tb.blockBlastType = GetShapeByDifficulty(currentDifficulty);
+                tb.blockBlastType = GetShapeAdaptive(FindObjectOfType<AIBlockBalancer>()?.GetPerformanceScore() ?? 0f);
+
+
             }
             else
             {
@@ -423,47 +431,47 @@ public class BlockSpawner : MonoBehaviour
         Debug.Log($"[Spawner] Spawned 3 new blocks with difficulty: {difficulty}");
     }
 
-    private TetrisBlock.BlockBlastType GetShapeByDifficulty(BlockDifficulty difficulty)
+    public TetrisBlock.BlockBlastType GetShapeAdaptive(float performanceScore)
     {
-        List<TetrisBlock.BlockBlastType> shapes;
+        // Danh sách shape từng độ khó
+        List<TetrisBlock.BlockBlastType> easyShapes = EasyShapes;
+        List<TetrisBlock.BlockBlastType> mediumShapes = MediumShapes;
+        List<TetrisBlock.BlockBlastType> hardShapes = HardShapes;
 
-        switch (difficulty)
-        {
-            case BlockDifficulty.Medium:
-                shapes = new List<TetrisBlock.BlockBlastType>
-            {
-                TetrisBlock.BlockBlastType.SmallL,
-                TetrisBlock.BlockBlastType.TShape,
-                TetrisBlock.BlockBlastType.ZShape,
-                TetrisBlock.BlockBlastType.SShape,
-                TetrisBlock.BlockBlastType.Plus
-            };
-                break;
+        // 🔸 Ngưỡng bảo vệ: mỗi loại luôn có ít nhất 10% xác suất
+        const float minWeight = 0.1f;
 
-            case BlockDifficulty.Hard:
-                shapes = new List<TetrisBlock.BlockBlastType>
-            {
-                TetrisBlock.BlockBlastType.BigSquare,
-                TetrisBlock.BlockBlastType.Corner3x3,
-                TetrisBlock.BlockBlastType.UShape,
-                TetrisBlock.BlockBlastType.HollowSquare,
-                TetrisBlock.BlockBlastType.CrossX
-            };
-                break;
+        // 🔸 Tính trọng số thô dựa vào performance
+        float easyWeight = 1f - (performanceScore / 100f);    // càng giỏi → ít Easy
+        float hardWeight = (performanceScore / 100f);          // càng giỏi → nhiều Hard
+        float mediumWeight = 1f - Mathf.Abs(0.5f - (performanceScore / 100f)) * 2f;
 
-            default: // Easy
-                shapes = new List<TetrisBlock.BlockBlastType>
-            {
-                TetrisBlock.BlockBlastType.Single,
-                TetrisBlock.BlockBlastType.Square2,
-                TetrisBlock.BlockBlastType.Line3_Vertical,
-                TetrisBlock.BlockBlastType.Line4_Vertical,
-            };
-                break;
-        }
+        // 🔸 Đảm bảo mỗi loại >= minWeight
+        easyWeight = Mathf.Max(easyWeight, minWeight);
+        mediumWeight = Mathf.Max(mediumWeight, minWeight);
+        hardWeight = Mathf.Max(hardWeight, minWeight);
 
-        return shapes[UnityEngine.Random.Range(0, shapes.Count)];
+        // 🔸 Chuẩn hoá lại tổng trọng số
+        float total = easyWeight + mediumWeight + hardWeight;
+        easyWeight /= total;
+        mediumWeight /= total;
+        hardWeight /= total;
+
+        // (Tuỳ chọn) Debug: hiển thị tỷ lệ hiện tại
+        Debug.Log($"[AI] ShapeDistribution = E:{easyWeight * 100f:F0}% / M:{mediumWeight * 100f:F0}% / H:{hardWeight * 100f:F0}% (score={performanceScore:F1})");
+
+        // 🔸 Chọn shape theo xác suất
+        float r = UnityEngine.Random.value;
+        if (r < easyWeight)
+            return easyShapes[UnityEngine.Random.Range(0, easyShapes.Count)];
+        else if (r < easyWeight + mediumWeight)
+            return mediumShapes[UnityEngine.Random.Range(0, mediumShapes.Count)];
+        else
+            return hardShapes[UnityEngine.Random.Range(0, hardShapes.Count)];
     }
+
+
+
 
     private void OnDisable()
     {

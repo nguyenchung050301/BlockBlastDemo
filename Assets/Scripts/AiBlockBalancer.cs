@@ -7,6 +7,16 @@ using UnityEngine;
 /// </summary>
 public class AIBlockBalancer : MonoBehaviour
 {
+    // === Thống kê hành vi người chơi ===
+    private float lastPlacementTime = 0f;          // thời gian đặt block gần nhất
+    private float totalPlacementTime = 0f;         // tổng thời gian giữa các lượt
+    private float averagePlacementTime = 0f;       // thời gian trung bình giữa các lượt
+    private int totalBlocksPlaced = 0;             // tổng số block đã đặt
+    private int totalLinesCleared = 0;             // tổng số hàng/cột đã clear
+    private float performanceScore = 0f;
+
+    private BlockDifficulty currentDifficulty = BlockDifficulty.Easy;
+
     private static readonly Dictionary<TetrisBlock.BlockBlastType, BlockDifficulty> shapeDifficulty =
     new Dictionary<TetrisBlock.BlockBlastType, BlockDifficulty>
 {
@@ -60,7 +70,69 @@ public class AIBlockBalancer : MonoBehaviour
     {
         if (spawner == null) return;
 
-        // Nếu có combo → tăng streak
+        // === Ghi nhận thời gian và thống kê ===
+        float now = Time.time;
+
+        if (lastPlacementTime > 0f)
+        {
+            float delta = now - lastPlacementTime;
+            totalPlacementTime += delta;
+            averagePlacementTime = totalPlacementTime / (totalBlocksPlaced + 1);
+        }
+
+        lastPlacementTime = now;
+        totalBlocksPlaced++;
+
+        if (wasCombo)
+            totalLinesCleared++;
+
+        Debug.Log($"[AI] Block #{totalBlocksPlaced} | LinesCleared={totalLinesCleared} | AvgTime={averagePlacementTime:F2}s");
+
+        // === Bước 2: Tính điểm hiệu suất người chơi ===
+        float clearRate = (float)totalLinesCleared / Mathf.Max(totalBlocksPlaced, 1);
+        // Công thức tính điểm
+        performanceScore = (clearRate * 120f) + (comboStreak * 3f) - (averagePlacementTime * 1.8f);
+        performanceScore = Mathf.Clamp(performanceScore, 0f, 100f);
+        Debug.Log($"[AI] PerformanceScore = {performanceScore:F1}");
+
+        // === Bước 3 + 4: Điều chỉnh độ khó dựa trên performanceScore có vùng đệm ===
+        var previousDifficulty = currentDifficulty;
+
+        // Vùng ngưỡng độ khó
+        float mediumUp = 28f;
+        float mediumDown = 22f;
+        float hardUp = 50f;
+        float hardDown = 40f;
+
+        switch (currentDifficulty)
+        {
+            case BlockDifficulty.Easy:
+                if (performanceScore >= mediumUp)
+                    currentDifficulty = BlockDifficulty.Medium;
+                break;
+
+            case BlockDifficulty.Medium:
+                if (performanceScore >= hardUp)
+                    currentDifficulty = BlockDifficulty.Hard;
+                else if (performanceScore < mediumDown)
+                    currentDifficulty = BlockDifficulty.Easy;
+                break;
+
+            case BlockDifficulty.Hard:
+                if (performanceScore < hardDown)
+                    currentDifficulty = BlockDifficulty.Medium;
+                break;
+        }
+
+        // Nếu có thay đổi độ khó thì thông báo và cập nhật cho Spawner
+        if (currentDifficulty != previousDifficulty)
+        {
+            Debug.Log($"[AI] Difficulty changed: {previousDifficulty} → {currentDifficulty}");
+            if (spawner != null)
+                spawner.currentDifficulty = currentDifficulty;
+        }
+
+        // === Bước 5: Theo dõi combo streak (phụ) ===
         if (wasCombo)
         {
             comboStreak++;
@@ -68,25 +140,13 @@ public class AIBlockBalancer : MonoBehaviour
         }
         else
         {
-            // Nếu không combo → giảm dần độ khó
             comboStreak = Mathf.Max(comboStreak - 1, 0);
         }
 
-        // Cập nhật độ khó dựa trên combo
-        BlockDifficulty difficulty = CalculateDifficulty();
+        // === Log cuối cùng ===
+        Debug.Log($"[AI] Current difficulty = {currentDifficulty}");
 
-        // Ghi lại trạng thái vào spawner
-        spawner.currentDifficulty = difficulty;
-
-        // Log ra cho debug
-        Debug.Log($"[AI] Current difficulty = {difficulty}");
-
-        // Khi người chơi vừa hoàn thành combo, spawn block “thưởng”
-        if (wasCombo)
-        {
-            Debug.Log($"[AI] Combo streak {comboStreak}! Next spawn difficulty: {difficulty}");
-            spawner.SpawnBlockWithDifficulty(difficulty);
-        }
+        // LƯU Ý: KHÔNG gọi SpawnBlockWithDifficulty ở đây — spawner quản lý spawn theo flow gốc
     }
 
     /// <summary>
@@ -100,5 +160,13 @@ public class AIBlockBalancer : MonoBehaviour
             return BlockDifficulty.Medium;
         else
             return BlockDifficulty.Hard;
+    }
+    public BlockDifficulty GetCurrentDifficulty()
+    {
+        return currentDifficulty;
+    }
+    public float GetPerformanceScore()
+    {
+        return performanceScore;
     }
 }
