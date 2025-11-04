@@ -36,6 +36,8 @@ public class TetrisBlock : MonoBehaviour
         SShape,
         SShape_Mirror,
         Corner3x3,
+        Rect2x3_H,   // Rectangle 2x3 horizontal
+        Rect2x3_V,   // Rectangle 2x3 vertical
 
         // Hard
         TallL,
@@ -48,7 +50,11 @@ public class TetrisBlock : MonoBehaviour
         L5Shape,
         L5Shape_R90,
         TShape_R180,
-        TShape_R270
+        TShape_R270,
+        Corner5x5,
+        Zigzag5,
+        Snake,
+        Spiral,
     }
 
 
@@ -335,6 +341,21 @@ public class TetrisBlock : MonoBehaviour
             };
 
             // ----- MEDIUM -----
+            // === Rectangle 2x3 ===
+            case BlockBlastType.Rect2x3_H:
+                return new[]
+                {
+                new Vector2Int(-1,0), new Vector2Int(0,0), new Vector2Int(1,0),
+                new Vector2Int(-1,1), new Vector2Int(0,1), new Vector2Int(1,1)
+                };
+
+            case BlockBlastType.Rect2x3_V:
+                return new[]
+                {
+                new Vector2Int(0,-1), new Vector2Int(0,0), new Vector2Int(0,1),
+                new Vector2Int(1,-1), new Vector2Int(1,0), new Vector2Int(1,1)
+                };
+
             case BlockBlastType.Line4_Horizontal:
                 return new[]
                 {
@@ -499,6 +520,41 @@ public class TetrisBlock : MonoBehaviour
                 new Vector2Int(-1,0)
             };
 
+            case BlockBlastType.Corner5x5:
+                return new[]
+                {
+                    // Hình chữ L kích thước 5x5
+                    new Vector2Int(0,0), new Vector2Int(1,0), new Vector2Int(2,0), new Vector2Int(3,0), new Vector2Int(4,0),
+                    new Vector2Int(0,1), new Vector2Int(0,2), new Vector2Int(0,3), new Vector2Int(0,4)
+                };
+
+            case BlockBlastType.Zigzag5:
+                return new[]
+                {
+                    // Hình ziczac dài 5 ô
+                    new Vector2Int(0,0), new Vector2Int(1,0),
+                    new Vector2Int(1,1), new Vector2Int(2,1),
+                    new Vector2Int(2,2)
+                };
+
+            case BlockBlastType.Snake:
+                return new[]
+                {
+                    // Hình rắn uốn khúc
+                    new Vector2Int(0,0), new Vector2Int(1,0),
+                    new Vector2Int(1,1), new Vector2Int(2,1),
+                    new Vector2Int(2,2), new Vector2Int(3,2)
+                };
+
+            case BlockBlastType.Spiral:
+                return new[]
+                {
+                    // Hình xoắn ốc 3x3
+                    new Vector2Int(0,0), new Vector2Int(1,0), new Vector2Int(2,0),
+                    new Vector2Int(2,1), new Vector2Int(2,2),
+                    new Vector2Int(1,2), new Vector2Int(0,2),
+                    new Vector2Int(0,1)
+                };
             default:
                 return new[] { new Vector2Int(0, 0) };
         }

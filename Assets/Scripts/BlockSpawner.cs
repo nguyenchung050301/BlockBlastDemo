@@ -30,30 +30,55 @@ public class BlockSpawner : MonoBehaviour
     private static readonly List<TetrisBlock.BlockBlastType> EasyShapes = new()
 {
     TetrisBlock.BlockBlastType.Single,
-  //  TetrisBlock.BlockBlastType.Pair,
+    TetrisBlock.BlockBlastType.Pair_Horizontal,
+    TetrisBlock.BlockBlastType.Pair_Vertical,
     TetrisBlock.BlockBlastType.Square2,
- //   TetrisBlock.BlockBlastType.Line3,
+    TetrisBlock.BlockBlastType.Line3_Horizontal,
+    TetrisBlock.BlockBlastType.Line3_Vertical,
     TetrisBlock.BlockBlastType.SmallL,
-   // TetrisBlock.BlockBlastType.Line4
+    TetrisBlock.BlockBlastType.SmallL_R90,
+    TetrisBlock.BlockBlastType.SmallL_R180,
+    TetrisBlock.BlockBlastType.SmallL_R270
 };
+
 
     private static readonly List<TetrisBlock.BlockBlastType> MediumShapes = new()
 {
-    TetrisBlock.BlockBlastType.SmallL,
+    TetrisBlock.BlockBlastType.Line4_Horizontal,
+    TetrisBlock.BlockBlastType.Line4_Vertical,
     TetrisBlock.BlockBlastType.TShape,
+    TetrisBlock.BlockBlastType.TShape_R90,
+    TetrisBlock.BlockBlastType.TShape_R180,
+    TetrisBlock.BlockBlastType.TShape_R270,
     TetrisBlock.BlockBlastType.ZShape,
+    TetrisBlock.BlockBlastType.ZShape_Mirror,
     TetrisBlock.BlockBlastType.SShape,
-    TetrisBlock.BlockBlastType.Plus
+    TetrisBlock.BlockBlastType.SShape_Mirror,
+    TetrisBlock.BlockBlastType.Corner3x3,
+    TetrisBlock.BlockBlastType.Plus,
+    TetrisBlock.BlockBlastType.TallL,
+    TetrisBlock.BlockBlastType.Rect2x3_H,
+    TetrisBlock.BlockBlastType.Rect2x3_V
 };
+
+
 
     private static readonly List<TetrisBlock.BlockBlastType> HardShapes = new()
 {
     TetrisBlock.BlockBlastType.BigSquare,
-    TetrisBlock.BlockBlastType.Corner3x3,
-    TetrisBlock.BlockBlastType.UShape,
     TetrisBlock.BlockBlastType.HollowSquare,
-    TetrisBlock.BlockBlastType.CrossX
+    TetrisBlock.BlockBlastType.CrossX,
+    TetrisBlock.BlockBlastType.UShape,
+    TetrisBlock.BlockBlastType.UShape_R90,
+    TetrisBlock.BlockBlastType.L5Shape,
+    TetrisBlock.BlockBlastType.L5Shape_R90,
+    TetrisBlock.BlockBlastType.Corner5x5,
+    TetrisBlock.BlockBlastType.Zigzag5,
+    TetrisBlock.BlockBlastType.Snake,
+    TetrisBlock.BlockBlastType.Spiral
 };
+
+
 
     [Header("Grid Reference")]
     [Tooltip("Reference to the GridGenerator in the scene")]
@@ -447,10 +472,14 @@ public class BlockSpawner : MonoBehaviour
         float mediumWeight = 1f - Mathf.Abs(0.5f - (performanceScore / 100f)) * 2f;
 
         // 🔸 Đảm bảo mỗi loại >= minWeight
-        easyWeight = Mathf.Max(easyWeight, minWeight);
-        mediumWeight = Mathf.Max(mediumWeight, minWeight);
-        hardWeight = Mathf.Max(hardWeight, minWeight);
+        // easyWeight = Mathf.Max(easyWeight, minWeight);
+        // mediumWeight = Mathf.Max(mediumWeight, minWeight);
+        // hardWeight = Mathf.Max(hardWeight, minWeight);
 
+
+        easyWeight = Mathf.Lerp(0.7f, 0.4f, performanceScore / 100f);
+        mediumWeight = Mathf.Lerp(0.25f, 0.4f, performanceScore / 100f);
+        hardWeight = Mathf.Lerp(0.05f, 0.2f, performanceScore / 100f);
         // 🔸 Chuẩn hoá lại tổng trọng số
         float total = easyWeight + mediumWeight + hardWeight;
         easyWeight /= total;
